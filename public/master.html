@@ -1,1 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Libra 24 - Master Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="top">
+    <div class="brand">LIBRA 24</div>
+    <div class="top-right">
+      <span id="who">Master</span>
+      <button class="logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="notifs" onclick="tab(this)">Notifications</div>
+    <div class="tab" data-tab="agents" onclick="tab(this)">Agents</div>
+    <div class="tab" data-tab="players" onclick="tab(this)">Players</div>
+    <div class="tab" data-tab="games" onclick="tab(this)">Games</div>
+    <div class="tab" data-tab="controller" onclick="tab(this)">Game Controller</div>
+    <div class="tab" data-tab="history" onclick="tab(this)">History</div>
+    <div class="tab" data-tab="live" onclick="tab(this)">Live Bets</div>
+    <div class="tab" data-tab="settings" onclick="tab(this)">Settings</div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="panel active" id="notifs">
+    <div class="card">
+      <h3>LIVE NOTIFICATIONS</h3>
+      <div id="notifList"><div style="color:#5a6a62;font-size:13px">Waiting for activity...</div></div>
+    </div>
+  </div>
+
+  <!-- AGENTS -->
+  <div class="panel" id="agents">
+    <div class="card">
+      <h3>CREATE AGENT</h3>
+      <div class="row">
+        <input id="agUser" placeholder="Username">
+        <input id="agPass" placeholder="Password" type="text">
+        <input id="agShare" type="number" placeholder="Share %" value="5" style="width:90px">
+        <input id="agCoins" type="number" placeholder="Coins" value="0" style="width:100px">
+        <button class="btn-gold" onclick="createAgent()">Create Agent</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ALL AGENTS</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Username</th><th>Share %</th><th>Coins</th><th>Team Net</th><th>Share Result</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="agentTable"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- PLAYERS -->
+  <div class="panel" id="players">
+    <div class="card">
+      <h3>CREATE PLAYER</h3>
+      <div class="row">
+        <input id="plUser" placeholder="Username">
+        <input id="plPass" placeholder="Password" type="text">
+        <input id="plCoins" type="number" placeholder="Coins" value="1000" style="width:100px">
+        <select id="plAgent"><option value="">No Agent</option></select>
+        <button class="btn-green" onclick="createPlayer()">Create Player</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ADD / REMOVE COINS</h3>
+      <div class="row">
+        <input id="cUser" placeholder="Username">
+        <input id="cAmt" type="number" placeholder="Amount (+/-)" style="width:120px">
+        <button class="btn-green" onclick="updCoins()">Update</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ALL PLAYERS</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Username</th><th>Agent</th><th>Coins</th><th>Credit</th><th>Debit</th><th>Net</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="playerTable"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- GAMES -->
+  <div class="panel" id="games">
+    <div class="card">
+      <h3>GAMES (Square Grid Images)</h3>
+      <p style="font-size:12px;color:#5a6a62;margin-bottom:12px">Master-only game controls. Games are served by this Libra 24 server.</p>
+      <div id="gamesEdit"></div>
+    </div>
+  </div>
+
+  <!-- GAME CONTROLLER -->
+  <div class="panel" id="controller">
+    <div class="card">
+      <h3>MASTER GAME DECISION PANEL</h3>
+      <p style="font-size:12px;color:#5a6a62;margin-bottom:14px">
+        Har game ke live side totals yahan dikhenge. Kam coins wali side dekh ke result force kar sakte ho.
+        Decision current / next reveal par apply hota hai.
+      </p>
+      <div id="decisionPanel" style="display:grid;gap:14px"></div>
+    </div>
+    <div class="card">
+      <h3>OPEN GAME PAGES</h3>
+      <div id="controllerList"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY / AUDIT -->
+  <div class="panel" id="history">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Total Credits</div><div class="stat-value" id="hCredits">0</div><div class="stat-sub">Recorded coin credits</div></div>
+      <div class="stat-card"><div class="stat-label">Total Debits</div><div class="stat-value" id="hDebits">0</div><div class="stat-sub">Recorded coin debits</div></div>
+      <div class="stat-card"><div class="stat-label">Net Change</div><div class="stat-value" id="hNet">0</div><div class="stat-sub">Credits minus debits</div></div>
+      <div class="stat-card"><div class="stat-label">Game Entries</div><div class="stat-value" id="hGames">0</div><div class="stat-sub">Recorded game sessions</div></div>
+    </div>
+    <div class="card">
+      <div class="history-toolbar"><div><h3>COIN TRANSACTION HISTORY</h3><div class="subtle">Complete audit trail of balance changes.</div></div><input id="masterTxSearch" placeholder="Search player / actor" oninput="renderMasterHistory()"></div>
+      <div class="table-wrap"><table class="history-table"><thead><tr><th>Time</th><th>Player</th><th>Actor</th><th>Type</th><th>Amount</th><th>Before</th><th>After</th></tr></thead><tbody id="masterTxTable"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="history-toolbar"><div><h3>GAME HISTORY</h3><div class="subtle">Player game-entry history captured by the platform.</div></div><input id="masterGameSearch" placeholder="Search player / game" oninput="renderMasterHistory()"></div>
+      <div class="table-wrap"><table class="history-table"><thead><tr><th>Time</th><th>Player</th><th>Agent</th><th>Game</th><th>Coins at Entry</th></tr></thead><tbody id="masterGameTable"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- LIVE BETS -->
+  <div class="panel" id="live">
+    <div class="card">
+      <h3>LIVE SIDE TOTALS (All Games)</h3>
+      <p style="font-size:12px;color:#5a6a62;margin-bottom:12px">Kis side kitne coins lage hain — real-time. Kam coins wali side highlight hoti hai.</p>
+      <div id="liveTotals" style="display:grid;gap:12px"></div>
+    </div>
+    <div class="card">
+      <h3>RECENT BETS FEED</h3>
+      <div id="liveBets"><div style="color:#5a6a62;font-size:13px">No live bets yet. Games se connect hone ke baad yahan dikhega.</div></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel" id="settings">
+    <div class="card">
+      <h3>MY PROFILE (Master)</h3>
+      <p style="font-size:12px;color:#5a6a62;margin-bottom:10px">Apna username aur password change karo</p>
+      <div class="row">
+        <input id="profUser" placeholder="New Username">
+        <input id="profCurrPass" type="password" placeholder="Current Password">
+        <input id="profNewPass" type="password" placeholder="New Password (optional)">
+        <button class="btn-gold" onclick="updateProfile()">Update Profile</button>
+      </div>
+      <p style="font-size:11px;color:#5a6a62;margin-top:8px">Password change ke liye current password zaroori hai</p>
+    </div>
+    <div class="card">
+      <h3>NOTIFICATION AGENTS</h3>
+      <p style="font-size:12px;color:#5a6a62;margin-bottom:10px">Kaunse agents ko player enter notification mile</p>
+      <div id="notifyAgents"></div>
+      <button class="btn-gold" style="margin-top:10px" onclick="saveNotifyAgents()">Save</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let user = null, allUsers = {}, allGames = {}, settings = {};
+
+    try {
+      user = JSON.parse(localStorage.getItem('l24'));
+      if (!user || user.role !== 'master') throw 0;
+    } catch { location.href = '/login'; }
+
+    document.getElementById('who').textContent = user.username;
+
+    socket.emit('auth', { username: user.username, token: user.token }, res => {
+      if (!res.success) { localStorage.removeItem('l24'); location.href = '/login'; return; }
+      socket.emit('get_state');
+    });
+
+    function tab(el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById(el.dataset.tab).classList.add('active');
+    }
+
+    function toast(m) {
+      const t = document.getElementById('toast');
+      t.textContent = m; t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 2500);
+    }
+
+    function logout() { localStorage.removeItem('l24'); location.href = '/login'; }
+
+    function createAgent() {
+      socket.emit('master_create_agent', {
+        username: document.getElementById('agUser').value,
+        password: document.getElementById('agPass').value,
+        sharePercent: document.getElementById('agShare').value,
+        coins: document.getElementById('agCoins').value
+      }, res => {
+        if (res.success) { toast('Agent created'); document.getElementById('agUser').value=''; document.getElementById('agPass').value=''; }
+        else toast(res.message || 'Error');
+      });
+    }
+
+    function createPlayer() {
+      socket.emit('master_create_player', {
+        username: document.getElementById('plUser').value,
+        password: document.getElementById('plPass').value,
+        coins: document.getElementById('plCoins').value,
+        agent: document.getElementById('plAgent').value
+      }, res => {
+        if (res.success) { toast('Player created'); document.getElementById('plUser').value=''; document.getElementById('plPass').value=''; }
+        else toast(res.message || 'Error');
+      });
+    }
+
+    function updCoins() {
+      socket.emit('update_coins', {
+        username: document.getElementById('cUser').value,
+        amount: document.getElementById('cAmt').value
+      }, res => {
+        if (res.success) toast('Coins updated: ' + res.coins);
+        else toast(res.message || 'Error');
+      });
+    }
+
+    function setShare(username) {
+      const p = prompt('Share % for ' + username, allUsers[username]?.sharePercent || 0);
+      if (p === null) return;
+      socket.emit('set_share', { username, percent: p }, res => {
+        if (res.success) toast('Share updated');
+      });
+    }
+
+    function toggle(username, active) {
+      socket.emit('toggle_user', { username, active }, res => {
+        if (res.success) toast(active ? 'Activated' : 'Terminated');
+      });
+    }
+
+    function toggleGame(id, active){ socket.emit('update_game',{id,active},res=>{ if(res.success) toast(active?'Game published':'Game hidden'); else toast('Update failed'); }); }
+
+function saveGame(id) {
+      const name = document.getElementById('gname_'+id).value;
+      const image = document.getElementById('gimg_'+id).value;
+      const url = document.getElementById('gurl_'+id).value;
+      const active = document.getElementById('gact_'+id).checked;
+      socket.emit('update_game', { id, name, image, url, active }, res => {
+        if (res.success) toast('Game updated');
+      });
+    }
+
+    function saveNotifyAgents() {
+      const agents = [];
+      document.querySelectorAll('#notifyAgents input:checked').forEach(c => agents.push(c.value));
+      socket.emit('set_notify_agents', { agents }, res => {
+        if (res.success) toast('Saved');
+      });
+    }
+
+    function updateProfile() {
+      const newUsername = document.getElementById('profUser').value.trim();
+      const currentPassword = document.getElementById('profCurrPass').value;
+      const newPassword = document.getElementById('profNewPass').value;
+      if (!newUsername && !newPassword) return toast('Kuch change karo');
+      socket.emit('master_update_profile', { newUsername, newPassword, currentPassword }, res => {
+        if (!res.success) return toast(res.message || 'Error');
+        toast('Profile updated!');
+        // Update local storage
+        user.username = res.user.username;
+        user.token = res.user.token;
+        localStorage.setItem('l24', JSON.stringify(user));
+        document.getElementById('who').textContent = user.username;
+        document.getElementById('profUser').value = '';
+        document.getElementById('profCurrPass').value = '';
+        document.getElementById('profNewPass').value = '';
+      });
+    }
+
+    function renderUsers(users) {
+      allUsers = users || {};
+      const agents = Object.values(allUsers).filter(u => u.role === 'agent');
+      const players = Object.values(allUsers).filter(u => u.role === 'player');
+
+      // Agent select for player create
+      const sel = document.getElementById('plAgent');
+      sel.innerHTML = '<option value="">No Agent</option>' + agents.map(a => `<option value="${a.username}">${a.username}</option>`).join('');
+
+      // Agent table
+      document.getElementById('agentTable').innerHTML = agents.map(a => `
+        <tr>
+          <td>${a.username}</td>
+          <td><span class="share-chip">${a.sharePercent || 0}%</span></td>
+          <td>${Number(a.coins).toLocaleString()}</td>
+          <td class="net-box">${Number(a.netChange||0).toLocaleString()}</td>
+          <td>${(Number(a.netChange||0) * Number(a.sharePercent||0) / 100).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+          <td>${a.isActive ? '<span class="badge badge-agent">Active</span>' : '<span class="badge badge-off">Off</span>'}</td>
+          <td>
+            <button class="btn-blue" style="padding:4px 8px;font-size:11px" onclick="setShare('${a.username}')">%</button>
+            <button class="${a.isActive?'btn-red':'btn-green'}" style="padding:4px 8px;font-size:11px" onclick="toggle('${a.username}',${!a.isActive})">${a.isActive?'Off':'On'}</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="history-empty">No agents</td></tr>';
+
+      // Player table
+      document.getElementById('playerTable').innerHTML = players.map(p => `
+        <tr>
+          <td>${p.username}</td>
+          <td>${p.parent || '—'}</td>
+          <td>${Number(p.coins).toLocaleString()}</td>
+          <td>${Number(p.totalCredit||0).toLocaleString()}</td>
+          <td>${Number(p.totalDebit||0).toLocaleString()}</td>
+          <td class="net-box">${Number(p.netChange||0).toLocaleString()}</td>
+          <td>${p.isActive ? '<span class="badge badge-player">Active</span>' : '<span class="badge badge-off">Off</span>'}</td>
+          <td>
+            <button class="${p.isActive?'btn-red':'btn-green'}" style="padding:4px 8px;font-size:11px" onclick="toggle('${p.username}',${!p.isActive})">${p.isActive?'Terminate':'Activate'}</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="8" class="history-empty">No players</td></tr>';
+
+      // Notify agents checkboxes
+      document.getElementById('notifyAgents').innerHTML = agents.map(a => `
+        <label style="display:block;margin:6px 0;font-size:13px">
+          <input type="checkbox" value="${a.username}" ${(settings.notifyAgents||[]).includes(a.username)?'checked':''}> ${a.username}
+        </label>
+      `).join('') || '<div style="color:#5a6a62">No agents yet</div>';
+    }
+
+    function renderGames(games) {
+      allGames = games || {};
+      document.getElementById('gamesEdit').innerHTML = Object.values(allGames).sort((a,b)=>(a.order||0)-(b.order||0)).map(g => `
+        <div class="game-edit">
+          <div style="font-weight:700;color:#d4af37;margin-bottom:8px">${g.name}</div>
+          <input id="gname_${g.id}" value="${g.name||''}" placeholder="Name">
+          <input id="gimg_${g.id}" value="${g.image||''}" placeholder="Image URL">
+          <input id="gurl_${g.id}" value="${g.url||''}" placeholder="Game URL (Netlify/Render)">
+          <label style="font-size:12px"><input type="checkbox" id="gact_${g.id}" ${g.active?'checked':''}> Active</label>
+          <button class="btn-gold" style="margin-top:6px" onclick="saveGame('${g.id}')">Save</button>
+        </div>
+      `).join('');
+
+      // Game Controller list
+      const cl = document.getElementById('controllerList');
+      if (cl) {
+        cl.innerHTML = Object.values(allGames).sort((a,b)=>(a.order||0)-(b.order||0)).map(g => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0a100c;border-radius:8px;margin-bottom:8px">
+            <div>
+              <div style="font-weight:700;color:#d4af37">${g.name}</div>
+              <div style="font-size:11px;color:#5a6a62;margin-top:2px">${g.url ? g.url : 'URL not set'}</div>
+            </div>
+            <div>
+              ${g.url ? `<button class="btn-blue" style="padding:8px 12px;font-size:12px" onclick="window.open('${g.url}','_blank')">Open Game</button><button class="btn-gold" style="padding:8px 12px;font-size:12px" onclick="toggleGame('${g.id}', ${!g.active})">${g.active?'Hide':'Publish'}</button>` : '<span style="color:#5a6a62;font-size:12px">Set URL first</span>'}
+            </div>
+          </div>
+        `).join('') || '<div style="color:#5a6a62">No games</div>';
+      }
+    }
+
+
+    let historyTransactions = [], historyGames = [];
+    function fmt(n){ return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2}); }
+    function renderMasterHistory(){
+      const txQ=(document.getElementById('masterTxSearch')?.value||'').toLowerCase();
+      const gameQ=(document.getElementById('masterGameSearch')?.value||'').toLowerCase();
+      const tx=historyTransactions.filter(t => `${t.username} ${t.actor} ${t.type}`.toLowerCase().includes(txQ));
+      const gh=historyGames.filter(g => `${g.username} ${g.game} ${g.parent||''}`.toLowerCase().includes(gameQ));
+      const c=tx.reduce((a,t)=>a+(t.delta>0?t.delta:0),0), d=tx.reduce((a,t)=>a+(t.delta<0?Math.abs(t.delta):0),0);
+      document.getElementById('hCredits').textContent=fmt(c); document.getElementById('hDebits').textContent=fmt(d); document.getElementById('hNet').textContent=fmt(c-d); document.getElementById('hGames').textContent=historyGames.length.toLocaleString();
+      document.getElementById('masterTxTable').innerHTML=tx.length?tx.map(t=>`<tr><td>${new Date(t.time).toLocaleString()}</td><td>${t.username}</td><td>${t.actor}</td><td><span class="pill">${t.type}</span></td><td class="${t.delta>=0?'positive':'negative'}">${t.delta>=0?'+':'-'}${fmt(Math.abs(t.delta))}</td><td>${fmt(t.before)}</td><td>${fmt(t.after)}</td></tr>`).join(''):'<tr><td colspan="7" class="history-empty">No transactions found</td></tr>';
+      document.getElementById('masterGameTable').innerHTML=gh.length?gh.map(g=>`<tr><td>${new Date(g.time).toLocaleString()}</td><td>${g.username}</td><td>${g.parent||'—'}</td><td>${g.game}</td><td>${fmt(g.coins)}</td></tr>`).join(''):'<tr><td colspan="5" class="history-empty">No game history found</td></tr>';
+    }
+
+    function renderNotifs(list) {
+      const box = document.getElementById('notifList');
+      if (!list || !list.length) { box.innerHTML = '<div style="color:#5a6a62;font-size:13px">Waiting for activity...</div>'; return; }
+      box.innerHTML = list.map(n => `
+        <div class="notif-item">
+          <div>${n.text}</div>
+          <div class="time">${new Date(n.time).toLocaleString()}</div>
+        </div>
+      `).join('');
+    }
+
+    socket.on('full_state', d => {
+      settings = d.settings || {};
+      renderUsers(d.users);
+      renderGames(d.games);
+      renderNotifs(d.notifications);
+      historyTransactions = d.transactions || []; historyGames = d.gameHistory || []; renderMasterHistory();
+      const pu = document.getElementById('profUser');
+      if (pu && !pu.value) pu.placeholder = 'Current: ' + (user.username || 'master');
+      if (d.liveGames) { liveGamesCache = d.liveGames; if (typeof renderLiveGames === 'function') renderLiveGames(); }
+    });
+    socket.on('users_updated', renderUsers);
+    socket.on('games_updated', renderGames);
+    socket.on('notification', n => {
+      const box = document.getElementById('notifList');
+      const div = document.createElement('div');
+      div.className = 'notif-item';
+      div.innerHTML = `<div>${n.text}</div><div class="time">${new Date(n.time).toLocaleString()}</div>`;
+      box.insertBefore(div, box.firstChild);
+      // Browser notification if permitted
+      if (Notification.permission === 'granted') new Notification('Libra 24', { body: n.text });
+    });
+    socket.on('live_bet', data => {
+      const box = document.getElementById('liveBets');
+      if (box.querySelector('div[style]')) box.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = 'live-bet';
+      div.innerHTML = `<span><b>${data.username||'?'}</b> → ${data.game||''} / ${data.bet||''}</span><span style="color:#d4af37">₹${data.amount||0}</span>`;
+      box.insertBefore(div, box.firstChild);
+      while (box.children.length > 40) box.removeChild(box.lastChild);
+    });
+
+    const SIDE_ORDER = {
+      dragon: ['Dragon','Tiger','Tie'],
+      andarbahar: ['Andar','Bahar'],
+      teenpatti: ['A','B'],
+      lucky7: ['down','exact','up']
+    };
+    const SIDE_PRETTY = { down:'7 Down', exact:'Exact 7', up:'7 Up', A:'Player A', B:'Player B' };
+
+    function prettySide(s){ return SIDE_PRETTY[s] || s; }
+
+    function renderLiveGames(){
+      const panel = document.getElementById('decisionPanel');
+      const totals = document.getElementById('liveTotals');
+      if(!panel || !totals) return;
+      const ids = ['dragon','andarbahar','teenpatti','lucky7'];
+      panel.innerHTML = ids.map(id => {
+        const g = liveGamesCache[id] || { name:id, sides:{}, forcedWinner:null, roundId:null, phase:'idle', lastWinner:null };
+        const order = SIDE_ORDER[id] || Object.keys(g.sides||{});
+        const entries = order.map(s => ({ side:s, amt: Number((g.sides||{})[s]||0) }));
+        const minAmt = Math.min(...entries.map(e=>e.amt), Infinity);
+        const maxAmt = Math.max(...entries.map(e=>e.amt), 0);
+        const sidesHtml = entries.map(e => {
+          const isMin = entries.length>1 && e.amt===minAmt && maxAmt!==minAmt;
+          const isMax = entries.length>1 && e.amt===maxAmt && maxAmt!==minAmt;
+          const bg = isMin ? 'rgba(34,197,94,.15)' : (isMax ? 'rgba(239,68,68,.12)' : '#0a100c');
+          const border = isMin ? '#22c55e' : (isMax ? '#ef4444' : '#1a2a22');
+          const tag = isMin ? ' <span style="color:#22c55e;font-size:10px">LOW</span>' : (isMax ? ' <span style="color:#ef4444;font-size:10px">HIGH</span>' : '');
+          const forced = g.forcedWinner===e.side;
+          return `<div style="flex:1;min-width:90px;background:${bg};border:1px solid ${border};border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:11px;color:#8a9a90;margin-bottom:4px">${prettySide(e.side)}${tag}</div>
+            <div style="font-size:18px;font-weight:700;color:#d4af37">₹${e.amt}</div>
+            <button onclick="forceResult('${id}','${e.side}')" style="margin-top:8px;width:100%;padding:6px 4px;border-radius:6px;border:none;cursor:pointer;font-weight:700;font-size:11px;background:${forced?'#d4af37':'#1a2a22'};color:${forced?'#000':'#e8e8e8'}">${forced?'✓ FORCED':('Force '+prettySide(e.side))}</button>
+          </div>`;
+        }).join('');
+        return `<div style="background:#0d1510;border:1px solid #1a2a22;border-radius:12px;padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div>
+              <b style="color:#d4af37;font-size:15px">${g.name||id}</b>
+              <span style="font-size:11px;color:#5a6a62;margin-left:8px">Round: ${g.roundId||'—'} · ${g.phase||'idle'}</span>
+              ${g.forcedWinner?`<span style="margin-left:8px;background:#d4af37;color:#000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">FORCE → ${prettySide(g.forcedWinner)}</span>`:''}
+              ${g.lastWinner?`<span style="margin-left:8px;font-size:11px;color:#8a9a90">Last: ${prettySide(g.lastWinner)}</span>`:''}
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn-gray" style="padding:6px 10px;font-size:11px" onclick="clearForce('${id}')">Clear Force</button>
+              <button class="btn-gray" style="padding:6px 10px;font-size:11px" onclick="resetSides('${id}')">Reset Sides</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${sidesHtml}</div>
+        </div>`;
+      }).join('');
+
+      totals.innerHTML = ids.map(id => {
+        const g = liveGamesCache[id] || { name:id, sides:{} };
+        const order = SIDE_ORDER[id] || Object.keys(g.sides||{});
+        const entries = order.map(s => ({ side:s, amt: Number((g.sides||{})[s]||0) }));
+        const minAmt = Math.min(...entries.map(e=>e.amt), Infinity);
+        const maxAmt = Math.max(...entries.map(e=>e.amt), 0);
+        const chips = entries.map(e => {
+          const isMin = entries.length>1 && e.amt===minAmt && maxAmt!==minAmt;
+          return `<span style="display:inline-block;padding:4px 10px;border-radius:6px;margin:2px;background:${isMin?'rgba(34,197,94,.2)':'#0a100c'};border:1px solid ${isMin?'#22c55e':'#1a2a22'};font-size:12px"><b>${prettySide(e.side)}</b>: ₹${e.amt}${isMin?' ↓':''}</span>`;
+        }).join('');
+        return `<div style="padding:10px;background:#0a100c;border-radius:8px;border:1px solid #1a2a22"><b style="color:#d4af37">${g.name||id}</b> ${chips}</div>`;
+      }).join('');
+    }
+
+    function forceResult(gameId, winner){
+      socket.emit('master_force_result', { gameId, winner }, res => {
+        if(res && res.success){ toast('Forced: '+winner+' on '+gameId); }
+        else toast((res&&res.message)||'Force failed');
+      });
+    }
+    function clearForce(gameId){
+      socket.emit('master_clear_force', { gameId }, res => {
+        if(res && res.success) toast('Force cleared');
+      });
+    }
+    function resetSides(gameId){
+      socket.emit('master_reset_sides', { gameId }, res => {
+        if(res && res.success){ liveGamesCache[gameId]=res.state; renderLiveGames(); toast('Sides reset'); }
+      });
+    }
+
+    socket.on('live_game_update', g => {
+      if(!g || !g.id) return;
+      liveGamesCache[g.id] = g;
+      renderLiveGames();
+    });
+
+    // initial fetch
+    socket.emit('get_live_games', res => {
+      if(res && res.success && res.liveGames){ liveGamesCache = res.liveGames; renderLiveGames(); }
+    });
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  </script>
+</body>
+</html>
 
