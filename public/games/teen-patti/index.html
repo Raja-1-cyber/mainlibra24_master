@@ -729,7 +729,7 @@ window.socketioGameBoot=function(user,token){
   try{ const so=window.__l24socket||(window.__l24socket=io()); so.emit('auth',{username:user.username,token},function(res){if(!res.success){location.href='/login';return;}});
     so.emit('join_game_room',{gameId:'teenpatti'});
     so.on('games_updated',function(gs){ const g=gs && gs['teenpatti']; if(g && !g.active) location.href='/dashboard'; });
-    so.on('master_force_result', function(d){ if(d && d.gameId==='teenpatti'){ masterForcedWinner = (d.winner==='A'?'a':(d.winner==='B'?'b':d.winner)) || null; }});
+    so.on('master_force_result', function(d){ if(d && d.gameId==='teenpatti'){ if(window.__setForce) window.__setForce(d.winner); else masterForcedWinner=(d.winner==='A'||d.winner==='a'?'a':(d.winner==='B'||d.winner==='b'?'b':d.winner)); }});
     so.on('live_game_update', function(g){ if(g && g.id==='teenpatti' && g.forcedWinner){ masterForcedWinner = (g.forcedWinner==='A'?'a':(g.forcedWinner==='B'?'b':g.forcedWinner)); }});
   }catch(e){}
 };
@@ -799,100 +799,83 @@ h1,h2,h3{font-size:14px!important}
 }
 </style>
 
-<script>
-/* ===== LIBRA STABILITY FIX: watchdog + null-safe ===== */
-(function(){
-  var stuckSince = 0;
-  var lastPhase = '';
-  setInterval(function(){
-    try{
-      var r = (typeof roundCache!=='undefined' && roundCache) ? roundCache : null;
-      if(!r) return;
-      var ph = r.phase || 'idle';
-      if(ph !== lastPhase){ lastPhase = ph; stuckSince = Date.now(); }
-      var stuckMs = Date.now() - stuckSince;
-      // stuck in waiting/dealing too long → force recover
-      if((ph==='waiting' || ph==='dealing') && stuckMs > 18000){
-        console.warn('[libra] stuck phase', ph, 'recovering');
-        stuckSince = Date.now();
-        try{
-          if(typeof stopEngine==='function') stopEngine();
-          if(typeof fdb!=='undefined' && typeof ROOT!=='undefined'){
-            fdb.ref(ROOT+'/round').update({
-              phase: 'result',
-              decided: true,
-              timer: 0
-            }).catch(function(){});
-          }
-          setTimeout(function(){
-            try{ if(typeof autoStartRound==='function') autoStartRound(); }catch(e){}
-          }, 1500);
-        }catch(e){ console.error(e); }
-      }
-      // idle too long with auto on → start
-      if((ph==='idle' || ph==='result') && stuckMs > 8000){
-        try{
-          if(typeof settingsCache!=='undefined' && settingsCache.autoRounds!==false){
-            if(typeof engineTimer!=='undefined' && !engineTimer && typeof nextRoundTimer!=='undefined' && !nextRoundTimer){
-              if(typeof autoStartRound==='function') autoStartRound();
-            }
-          }
-        }catch(e){}
-      }
-      // betting/locked without engine → restart engine
-      if((ph==='betting'||ph==='locked') && typeof engineTimer!=='undefined' && !engineTimer){
-        try{ if(typeof startEngineTick==='function') startEngineTick(); }catch(e){}
-      }
-    }catch(e){ console.error('[libra watchdog]', e); }
-  }, 3000);
-})();
-</script>
+
+
+
+
+
+
 
 <script>
-/* LIBRA_FORCE_ENGINE_OLD */
+/* ===== LIBRA LOCAL ENGINE v2 (Teen Patti) — sequential cards, no crash ===== */
 (function(){
-  function kick(){
-    try{
-      if(typeof ensureAutoEngine==='function') ensureAutoEngine();
-      else if(typeof autoStartRound==='function'){
-        var r=typeof roundCache!=='undefined'?roundCache:{};
-        var ph=(r&&r.phase)||'idle';
-        if((ph==='idle'||ph==='result') && typeof engineTimer!=='undefined' && !engineTimer)
-          autoStartRound();
-        else if((ph==='betting'||ph==='locked') && !engineTimer && typeof startEngineTick==='function')
-          startEngineTick();
-      }
-    }catch(e){}
-  }
-  setTimeout(kick,1500); setInterval(kick,5000);
-})();
-</script>
+  if(window.__libraLocalV2) return;
+  window.__libraLocalV2 = true;
+  window.__localOwnsRound = true;
 
-<script>
-/* ===== LIBRA LOCAL ENGINE (Teen Patti) ===== */
-(function(){
-  if(window.__libraLocalEngine) return;
-  window.__libraLocalEngine = true;
-  var localTimer=null, localBusy=false;
+  var localTimer=null, localBusy=false, animBusy=false, localRoundId=null;
+
+  window.__setForce = function(w){
+    if(!w){ window.masterForcedWinner=null; return; }
+    var s=String(w).toLowerCase();
+    if(s==='a'||s==='player a'||s==='teama') window.masterForcedWinner='a';
+    else if(s==='b'||s==='player b'||s==='teamb') window.masterForcedWinner='b';
+    else window.masterForcedWinner=s;
+    console.log('[TP] force set', window.masterForcedWinner);
+  };
 
   function setRound(partial){
     roundCache = Object.assign({}, roundCache||{}, partial);
-    try{ onRoundUpdate(); }catch(e){}
+    try{ onRoundUpdate(); }catch(e){ console.warn(e); }
   }
   function stopLocal(){ if(localTimer){ clearInterval(localTimer); localTimer=null; } }
 
   window.stopEngine = function(){
     stopLocal();
-    try{ if(engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
-    try{ if(nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
+    try{ if(typeof engineTimer!=='undefined'&&engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
+    try{ if(typeof nextRoundTimer!=='undefined'&&nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
   };
 
+  var _origBoot = window.socketioGameBoot;
+  window.socketioGameBoot = function(user, token){
+    try{ if(_origBoot) _origBoot(user, token); }catch(e){}
+    try{
+      var so = window.__l24socket || (window.__l24socket = io());
+      so.on('master_force_result', function(d){
+        if(d && d.gameId==='teenpatti') window.__setForce(d.winner);
+      });
+      so.on('live_game_update', function(g){
+        if(g && g.id==='teenpatti' && g.forcedWinner) window.__setForce(g.forcedWinner);
+      });
+    }catch(e){}
+  };
+
+  function clearBoard(){
+    try{
+      var a=document.getElementById('p-cards-a'); if(a) a.innerHTML='';
+      var b=document.getElementById('p-cards-b'); if(b) b.innerHTML='';
+      var ha=document.getElementById('p-hand-a'); if(ha) ha.textContent='';
+      var hb=document.getElementById('p-hand-b'); if(hb) hb.textContent='';
+      var rl=document.getElementById('p-result-line'); if(rl) rl.textContent='';
+    }catch(e){}
+  }
+
   window.autoStartRound = async function(){
-    if(localBusy) return;
-    stopLocal();
-    var rid = Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999);
-    setRound({ id:rid, phase:'betting', timer:10, result:null, hands:null, decided:false, pendingResult:null, bets:{} });
-    try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').set(roundCache).catch(function(){}); }catch(e){}
+    if(localBusy||animBusy) return;
+    window.stopEngine();
+    localRoundId = 'TP-'+Date.now().toString(36).toUpperCase();
+    clearBoard();
+    setRound({
+      id: localRoundId, phase:'betting', timer:10,
+      result:null, hands:null, decided:false, pendingResult:null, bets:{}
+    });
+    try{ if(typeof myBets!=='undefined'){ myBets={a:0,b:0}; myExpo=0;
+      var aa=document.getElementById('amt-a'); if(aa) aa.textContent='0';
+      var ab=document.getElementById('amt-b'); if(ab) ab.textContent='0';
+      var ba=document.getElementById('bet-a'); if(ba) ba.classList.remove('selected');
+      var bb=document.getElementById('bet-b'); if(bb) bb.classList.remove('selected');
+      var ex=document.getElementById('p-expo'); if(ex) ex.textContent='0';
+    } }catch(e){}
     startLocalTick();
   };
 
@@ -900,50 +883,116 @@ h1,h2,h3{font-size:14px!important}
     stopLocal();
     localTimer=setInterval(function(){
       try{
+        if(animBusy) return;
         var r=roundCache||{};
         if(r.phase!=='betting'&&r.phase!=='locked'){ stopLocal(); return; }
-        var timer=Math.max(0,(r.timer||0)-1), phase=r.phase;
-        if(timer===4&&phase==='betting') phase='locked';
+        var timer=Math.max(0,(Number(r.timer)||0)-1);
+        var phase=r.phase;
+        if(timer===4 && phase==='betting') phase='locked';
         if(timer<=0){
           stopLocal();
           setRound({timer:0, phase:'waiting'});
-          var w = (typeof masterForcedWinner!=='undefined' && masterForcedWinner) ? masterForcedWinner :
-            ((typeof smartAuto==='function')?smartAuto(r):(Math.random()<0.5?'a':'b'));
-          try{ masterForcedWinner=null; }catch(e){}
+          var w=null;
+          if(window.masterForcedWinner){ w=window.masterForcedWinner; window.masterForcedWinner=null; }
+          else if(typeof smartAuto==='function'){ try{ w=smartAuto(r); }catch(e){} }
+          if(w==='A') w='a'; if(w==='B') w='b';
+          if(w!=='a'&&w!=='b') w = Math.random()<0.5?'a':'b';
           finishLocal(w);
           return;
         }
         setRound({timer:timer, phase:phase});
-      }catch(e){ console.error(e); }
+      }catch(e){ console.error('TP tick',e); }
     },1000);
   }
 
+  function cardHtmlSafe(c){
+    try{ return (typeof cardHTML==='function') ? cardHTML(c) : '<div class="card">?</div>'; }catch(e){ return ''; }
+  }
+
+  function animateHands(hands){
+    return new Promise(function(resolve){
+      animBusy=true;
+      var aEl=document.getElementById('p-cards-a');
+      var bEl=document.getElementById('p-cards-b');
+      if(aEl) aEl.innerHTML='';
+      if(bEl) bEl.innerHTML='';
+      var ha=Array.isArray(hands&&hands.a)?hands.a:[];
+      var hb=Array.isArray(hands&&hands.b)?hands.b:[];
+      var shownA=['','',''], shownB=['','',''];
+      var step=0;
+      function next(){
+        try{
+          if(step<3){
+            if(ha[step] && aEl){ shownA[step]=cardHtmlSafe(ha[step]); aEl.innerHTML=shownA.join(''); }
+            step++;
+            setTimeout(next, 350);
+            return;
+          }
+          if(step<6){
+            var i=step-3;
+            if(hb[i] && bEl){ shownB[i]=cardHtmlSafe(hb[i]); bEl.innerHTML=shownB.join(''); }
+            step++;
+            setTimeout(next, 350);
+            return;
+          }
+          // labels
+          var haEl=document.getElementById('p-hand-a'); if(haEl) haEl.textContent=(hands&&hands.handA)||'';
+          var hbEl=document.getElementById('p-hand-b'); if(hbEl) hbEl.textContent=(hands&&hands.handB)||'';
+          animBusy=false;
+          resolve();
+        }catch(e){ console.error(e); animBusy=false; resolve(); }
+      }
+      setTimeout(next, 200);
+    });
+  }
+
   async function finishLocal(winner){
+    if(localBusy) return;
     localBusy=true;
     try{
+      if(winner==='A') winner='a'; if(winner==='B') winner='b';
+      if(winner!=='a'&&winner!=='b') winner='a';
       var hands = (typeof buildHands==='function') ? buildHands(winner) : {a:[],b:[],handA:'',handB:''};
-      setRound({ result:winner, hands:hands, decided:true, phase:'dealing', timer:0 });
-      setTimeout(function(){
-        setRound({ phase:'result' });
-        localBusy=false;
-        setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 4000);
-      }, 2200);
-      try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').update({result:winner,hands:hands,decided:true,phase:'dealing',timer:0}).catch(function(){}); }catch(e){}
+      // dealing phase WITHOUT exposing hands to onRoundUpdate race — keep hands null until anim done
+      setRound({ result:null, hands:null, decided:true, phase:'dealing', timer:0 });
+      await animateHands(hands);
+      setRound({ result:winner, hands:hands, decided:true, phase:'result', timer:0 });
+      try{
+        var so=window.__l24socket;
+        if(so) so.emit('game_result_report',{gameId:'teenpatti', roundId:localRoundId, winner: winner==='a'?'A':'B'});
+      }catch(e){}
+      localBusy=false;
+      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 4500);
     }catch(e){
-      console.error(e); localBusy=false;
-      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 2000);
+      console.error('TP finish',e);
+      localBusy=false; animBusy=false;
+      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 2500);
     }
   }
 
   window.ensureAutoEngine = function(){
+    if(animBusy||localBusy) return;
     var r=roundCache||{}, ph=r.phase||'idle';
-    if(ph==='idle'||ph==='result'||!ph){ if(!localTimer&&!localBusy) window.autoStartRound(); }
+    if(ph==='idle'||ph==='result'||!ph){ if(!localTimer) window.autoStartRound(); }
     else if((ph==='betting'||ph==='locked')&&!localTimer) startLocalTick();
-    else if(ph==='waiting'&&!r.decided) finishLocal((typeof smartAuto==='function')?smartAuto(r):'a');
+    else if(ph==='waiting'&&!r.decided){
+      var w=window.masterForcedWinner||'a'; window.masterForcedWinner=null; finishLocal(w);
+    }
   };
 
-  setTimeout(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 800);
-  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 6000);
+  // Disconnect firebase round listener to prevent mid-round overwrites
+  try{
+    if(typeof fdb!=='undefined' && typeof ROOT!=='undefined'){
+      fdb.ref(ROOT+'/round').off();
+    }
+  }catch(e){}
+
+  // Safer onRoundUpdate: during dealing don't force-show hands from partial state
+  var _origOnRound = window.onRoundUpdate;
+  // can't easily wrap if not on window — patch by leaving phase dealing with hands null
+
+  setTimeout(function(){ window.ensureAutoEngine(); }, 1000);
+  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 7000);
 })();
 </script>
 
