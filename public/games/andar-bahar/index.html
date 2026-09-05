@@ -1,1 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Andar Bahar - LIBRA 24</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --bg:#0b1220; --panel:#111827; --panel2:#0f172a;
+      --yellow:#f5c518; --yellow-dark:#d4a017;
+      --blue-btn:#2563eb; --green-btn:#16a34a; --red:#dc2626;
+      --text:#f1f5f9; --muted:#94a3b8;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    .hidden{display:none!important}
+    #login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(180deg,#0b1220,#0f172a)}
+    .login-logo{font-family:'Orbitron',sans-serif;font-size:clamp(1.6rem,6vw,2.4rem);font-weight:800;color:var(--yellow);letter-spacing:2px;margin-bottom:6px;text-shadow:0 0 24px rgba(245,197,24,.4)}
+    .login-sub{color:var(--muted);font-size:.85rem;letter-spacing:4px;margin-bottom:36px;text-transform:uppercase}
+    .login-box{background:var(--panel);border:1px solid #334155;border-radius:14px;padding:28px 24px;width:100%;max-width:360px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+    .login-box label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:6px;font-weight:600}
+    .login-box input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--text);font-size:.95rem;margin-bottom:16px;outline:none}
+    .login-box input:focus{border-color:var(--yellow)}
+    .login-btn{width:100%;padding:13px;border:none;border-radius:8px;background:linear-gradient(135deg,var(--yellow),var(--yellow-dark));color:#0b1220;font-weight:700;font-size:1rem;cursor:pointer}
+    .login-status{text-align:center;margin-top:12px;font-size:.78rem;color:var(--muted);min-height:20px}
+
+    .brand-bar{background:#0a0f1a;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:.9rem;font-weight:700}
+    .brand-bar .brand{color:var(--yellow);font-family:'Orbitron',sans-serif}
+    .brand-bar .right{display:flex;align-items:center;gap:10px}
+    .user-tag{color:var(--muted);font-size:.8rem;font-weight:500}
+    .btn-logout{background:var(--red);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:600;font-size:.78rem;cursor:pointer}
+
+    .coins-bar{background:var(--yellow);color:#0b1220;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:.95rem;flex-wrap:wrap;gap:8px}
+    .btn-bets{background:var(--green-btn);color:#fff;border:none;padding:6px 16px;border-radius:6px;font-weight:700;font-size:.8rem;cursor:pointer}
+    .game-bar{background:#0a0f1a;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:.82rem;font-weight:600;color:var(--muted);border-bottom:1px solid #1e293b;flex-wrap:wrap;gap:4px}
+    .game-name{color:var(--text);letter-spacing:1px}
+    .round-id{font-size:.72rem;color:#64748b}
+
+    .stage{background:#000;min-height:280px;position:relative;overflow:hidden;padding:16px 10px 20px}
+    .stage-video-hint{position:absolute;top:12px;left:14px;display:flex;align-items:center;gap:8px;z-index:4;pointer-events:none}
+    .stage-video-hint .dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 8px #ef4444;animation:blink 1.2s ease-in-out infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .stage-video-hint span{font-size:.65rem;letter-spacing:1.5px;color:rgba(255,255,255,.45);font-weight:600;text-transform:uppercase}
+    .stage-load-bar{position:absolute;top:32px;left:14px;width:100px;height:2px;background:rgba(255,255,255,.08);overflow:hidden;z-index:4}
+    .stage-load-bar i{display:block;height:100%;width:35%;background:linear-gradient(90deg,transparent,rgba(245,197,24,.8),transparent);animation:slide 1.6s linear infinite}
+    @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+    #p-stage-round{position:absolute;top:12px;right:14px;font-size:.65rem;color:rgba(255,255,255,.4);letter-spacing:1px;z-index:4;font-weight:600}
+
+    .deal-board{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;min-height:200px;margin-top:28px;max-width:520px;margin-left:auto;margin-right:auto}
+    .side-col{display:flex;flex-direction:column;align-items:center;gap:8px;min-height:160px}
+    .side-label{font-size:.7rem;font-weight:800;letter-spacing:2px;padding:4px 12px;border-radius:6px}
+    .side-label.andar{background:rgba(37,99,235,.25);color:#60a5fa}
+    .side-label.bahar{background:rgba(22,163,74,.25);color:#4ade80}
+    .side-cards{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;min-height:70px;align-content:flex-start}
+    .joker-col{display:flex;flex-direction:column;align-items:center;gap:8px}
+    .joker-label{font-size:.65rem;font-weight:700;color:var(--yellow);letter-spacing:1px}
+
+    .mini-card{
+      width:42px;height:60px;background:#fff;border-radius:5px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      box-shadow:0 4px 12px rgba(0,0,0,.5);font-weight:800;font-size:1rem;color:#0f172a;
+      animation:cardIn .25s ease;
+    }
+    .mini-card .s{font-size:.85rem;line-height:1}
+    .mini-card.red{color:#dc2626}
+    .mini-card.black{color:#0f172a}
+    .mini-card.joker{width:56px;height:80px;font-size:1.35rem;border:2px solid var(--yellow)}
+    .mini-card.joker .s{font-size:1.1rem}
+    .card-back-sm{
+      width:42px;height:60px;border-radius:5px;
+      background:linear-gradient(145deg,#1e3a5f,#0f172a);border:2px solid #334155;
+      display:flex;align-items:center;justify-content:center;color:var(--yellow);opacity:.6;font-size:1.1rem;
+    }
+    @keyframes cardIn{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
+
+    .timer-result-zone{background:#0a0f1a;padding:14px 16px 18px;text-align:center}
+    .timer-big{font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:800;color:var(--yellow);letter-spacing:2px}
+    .result-line{margin-top:6px;font-size:.95rem;font-weight:700}
+    .result-line .win{color:var(--yellow)}
+    .result-line .pl{color:#22c55e}
+    .result-line .pl.neg{color:#ef4444}
+
+    .main-bets{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px;background:#0b1220}
+    .main-bet{pointer-events:auto;border:none;border-radius:8px;padding:18px 8px;cursor:pointer;text-align:center;transition:transform .1s}
+    .main-bet:active:not(.disabled){transform:scale(.97)}
+    .main-bet.disabled{opacity:.55;pointer-events:none}
+    .main-bet .odds{font-size:.78rem;font-weight:600;opacity:.9}
+    .main-bet .name{font-size:1.15rem;font-weight:800;margin-top:2px;letter-spacing:.5px}
+    .main-bet .amt{font-size:.8rem;margin-top:4px;opacity:.85}
+    .main-bet.andar{background:var(--blue-btn);color:#fff}
+    .main-bet.bahar{background:var(--green-btn);color:#fff}
+    .main-bet.selected{outline:3px solid var(--yellow);outline-offset:-3px}
+
+    .chip-bar{display:flex;justify-content:center;gap:8px;padding:8px 10px 4px;background:#0b1220;flex-wrap:wrap}
+    .chip{width:44px;height:44px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;cursor:pointer;user-select:none}
+    .chip.active{transform:scale(1.12);box-shadow:0 0 0 2px #fff}
+    .c10{background:#334155;border-color:#64748b;color:#e2e8f0}
+    .c50{background:#7c3aed;border-color:#a78bfa;color:#fff}
+    .c100{background:#2563eb;border-color:#60a5fa;color:#fff}
+    .c500{background:#dc2626;border-color:#f87171;color:#fff}
+    .c1k{background:var(--yellow);border-color:#fde047;color:#0b1220}
+    .c2k{background:#0d9488;border-color:#2dd4bf;color:#fff}
+    .c5k{background:linear-gradient(135deg,#b45309,#f59e0b);border-color:#fbbf24;color:#fff}
+
+    .last-result-bar{background:#0a0f1a;padding:10px 14px;display:flex;align-items:center;gap:10px;border-top:1px solid #1e293b;overflow-x:auto}
+    .last-result-bar .label{font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:1px;white-space:nowrap}
+    .lr-dots{display:flex;gap:6px}
+    .lr-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:#fff;flex-shrink:0}
+    .lr-dot.andar{background:#2563eb}
+    .lr-dot.bahar{background:#16a34a}
+
+    .history-panel{background:var(--panel2);margin:10px;border-radius:10px;border:1px solid #1e293b;overflow:hidden}
+    .hp-head{padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;flex-wrap:wrap;gap:6px}
+    .hp-head h3{font-size:.95rem;color:var(--yellow);font-weight:700}
+    .hp-meta{font-size:.78rem;color:var(--muted)}
+    .hp-meta .net{color:#22c55e;font-weight:700}
+    .hist-table{width:100%;border-collapse:collapse;font-size:.78rem}
+    .hist-table th{text-align:left;padding:8px 10px;background:#0f172a;color:var(--muted);font-weight:600;font-size:.7rem}
+    .hist-table td{padding:8px 10px;border-top:1px solid #1e293b}
+    .pl-pos{color:#22c55e}.pl-neg{color:#ef4444}
+    .hist-empty{padding:20px;text-align:center;color:var(--muted);font-size:.85rem}
+
+    #admin-app{display:none;min-height:100vh;background:#0b1220}
+    .admin-wrap{max-width:900px;margin:0 auto;padding:16px}
+    .admin-card{background:var(--panel);border:2px solid var(--yellow-dark);border-radius:12px;padding:20px;margin-bottom:16px}
+    .admin-card h2{text-align:center;color:var(--yellow);font-size:1.15rem;font-weight:800;margin-bottom:18px}
+    .admin-card h3{color:var(--yellow);font-size:.95rem;margin-bottom:14px;font-weight:700}
+    .user-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+    .user-form input{padding:10px 12px;border-radius:6px;border:1px solid #334155;background:#0b1220;color:var(--text);font-size:.88rem}
+    .user-form input[type=text],.user-form input[type=password]{width:120px}
+    .user-form input[type=number]{width:100px}
+    .btn{border:none;border-radius:6px;padding:10px 14px;font-weight:700;font-size:.82rem;cursor:pointer;color:#fff}
+    .btn-green{background:#16a34a}.btn-red{background:#dc2626}.btn-blue{background:#2563eb}
+    .btn-yellow{background:var(--yellow);color:#0b1220}.btn-gray{background:#475569}
+    .btn:disabled{opacity:.45;cursor:not-allowed}
+    .user-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #1e293b;gap:10px;flex-wrap:wrap}
+    .user-row:last-child{border-bottom:none}
+    .uname{font-weight:700}.ucoins{font-size:.8rem;color:var(--muted);margin-top:2px}
+    .user-actions{display:flex;gap:6px}
+    .round-controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+    .round-controls .btn{flex:1;min-width:120px;padding:14px;font-size:.9rem}
+    .force-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+    .force-row select,.force-row input{padding:8px 10px;border-radius:6px;border:1px solid #334155;background:#0b1220;color:var(--text)}
+    .live-bets-table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:10px}
+    .live-bets-table th{text-align:left;padding:8px;color:var(--yellow);border-bottom:1px solid #334155;font-size:.72rem}
+    .live-bets-table td{padding:8px;border-bottom:1px solid #1e293b}
+
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1e293b;border:1px solid #334155;color:#fff;padding:12px 22px;border-radius:10px;font-weight:600;font-size:.88rem;z-index:9999;opacity:0;transition:all .3s;max-width:90%;text-align:center}
+    .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+    html{-webkit-text-size-adjust:100%}
+    @media(max-width:480px){
+      .stage{min-height:240px;padding:12px 6px 16px}
+      .mini-card{width:36px;height:52px;font-size:.85rem}
+      .mini-card.joker{width:48px;height:68px;font-size:1.15rem}
+      .card-back-sm{width:36px;height:52px}
+      .timer-big{font-size:1.4rem}
+      .main-bet .name{font-size:1rem}
+      .chip{width:38px;height:38px;font-size:.65rem}
+      .round-controls .btn{min-width:100%}
+    }
+  </style>
+<style id="libra24-bw-theme">
+:root{--yellow:#fff!important;--yellow-dark:#bbb!important;--green-btn:#111!important;--blue-btn:#222!important;--gray-btn:#333!important;--panel:#101010!important;--muted:#a7a7a7!important}
+html,body{background:#050505!important;color:#f5f5f5!important;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%,rgba(255,255,255,.055),transparent 45%);z-index:-1}
+.brand-bar,.game-bar{background:#080808!important;border-color:#2b2b2b!important}
+.coins-bar{background:#f5f5f5!important;color:#050505!important}
+.card,.panel,.history-panel,.admin-card,.game-card,.table-wrap{background:#101010!important;border-color:#303030!important;box-shadow:0 12px 35px rgba(0,0,0,.35)!important}
+button,.btn,.main-bet,.card-bet,.chip,.chip-btn{background:#171717!important;color:#fff!important;border:1px solid #444!important}
+button:hover,.btn:hover,.main-bet:hover,.card-bet:hover,.chip:hover,.chip-btn:hover{background:#292929!important;border-color:#777!important}
+.selected,.active{outline-color:#fff!important;border-color:#fff!important}
+input,select{background:#0b0b0b!important;color:#fff!important;border-color:#3b3b3b!important}
+table th{color:#fff!important;border-color:#444!important} table td{border-color:#282828!important}
+.win{color:#fff!important}.loss{color:#aaa!important}
+#admin-app,.admin-app,.admin-panel,.admin-wrap{display:none!important}
+</style>
+
+
+<style>
+:root{--bg:#050505!important;--panel:#101010!important;--panel2:#0b0b0b!important;--yellow:#fff!important;--yellow-dark:#d9d9d9!important;--blue-btn:#fff!important;--green-btn:#fff!important;--red:#fff!important;--text:#f5f5f5!important;--muted:#9a9a9a!important}
+body{background:#050505!important;color:#f5f5f5!important}.brand-bar,.game-bar,.last-result-bar{background:#0a0a0a!important;border-color:#292929!important}.coins-bar{background:#fff!important;color:#000!important}.btn-bets,.main-bet,.btn-green,.btn-blue,.btn-yellow,.btn-gray{background:#fff!important;color:#000!important;border-color:#fff!important}.main-bet.disabled{opacity:.35}.card,.panel,.history-panel,.game-card,.table-wrap{background:#101010!important;border-color:#303030!important;box-shadow:0 12px 35px rgba(0,0,0,.35)!important}.game-name,.game-title,h1,h2,h3{color:#fff!important}.win,.positive,.pl-pos{color:#fff!important}.loss,.negative,.pl-neg{color:#aaa!important}.login-screen,.login-box,.admin-app,.admin-card{display:none!important}
+</style>
+</head>
+<body>
+  
+
+  <div id="player-app" class="hidden">
+    <div class="brand-bar">
+      <span class="brand">LIBRA 24</span>
+      <div class="right">
+        <span class="user-tag" id="player-username">player</span>
+        <button class="btn-logout" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
+    <div class="coins-bar">
+      <span>COINS: <span id="p-coins">0</span></span>
+      <span>EXPO: <span id="p-expo">0</span></span>
+      <button class="btn-bets" onclick="document.getElementById('history-panel').scrollIntoView({behavior:'smooth'})">Bets</button>
+    </div>
+    <div class="game-bar">
+      <span class="game-name">ANDAR BAHAR</span>
+      <span class="round-id" id="p-round-id">ROUND ID: —</span>
+    </div>
+    <div class="stage">
+      <div class="stage-video-hint"><div class="dot"></div><span>LIVE · VIDEO LOADING</span></div>
+      <div class="stage-load-bar"><i></i></div>
+      <div id="p-stage-round"></div>
+      <div class="deal-board">
+        <div class="side-col">
+          <div class="side-label andar">ANDAR</div>
+          <div class="side-cards" id="p-andar-cards"><div class="card-back-sm">♠</div></div>
+        </div>
+        <div class="joker-col">
+          <div id="p-joker"><div class="card-back-sm" style="width:56px;height:80px">♠</div></div>
+        </div>
+        <div class="side-col">
+          <div class="side-label bahar">BAHAR</div>
+          <div class="side-cards" id="p-bahar-cards"><div class="card-back-sm">♠</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="timer-result-zone">
+      <div class="timer-big" id="p-timer">—</div>
+      <div class="result-line" id="p-result-line"></div>
+    </div>
+    <div class="chip-bar">
+      <div class="chip c100 active" data-v="100" onclick="selChip(this)">100</div>
+      <div class="chip c500" data-v="500" onclick="selChip(this)">500</div>
+      <div class="chip c1k" data-v="1000" onclick="selChip(this)">1K</div>
+      <div class="chip c2k" data-v="2000" onclick="selChip(this)">2K</div>
+      <div class="chip c5k" data-v="5000" onclick="selChip(this)">5K</div>
+    </div>
+    <div class="main-bets">
+      <button class="main-bet andar" id="bet-andar" onclick="placeBet('andar')">
+        <div class="odds">0.95</div><div class="name">ANDAR</div><div class="amt" id="amt-andar">0</div>
+      </button>
+      <button class="main-bet bahar" id="bet-bahar" onclick="placeBet('bahar')">
+        <div class="odds">0.95</div><div class="name">BAHAR</div><div class="amt" id="amt-bahar">0</div>
+      </button>
+    </div>
+    <div class="last-result-bar">
+      <span class="label">LAST RESULT</span>
+      <div class="lr-dots" id="p-last-dots"></div>
+    </div>
+    <div class="history-panel" id="history-panel">
+      <div class="hp-head">
+        <h3>📋 History &amp; Statement</h3>
+        <div class="hp-meta">Rounds: <span id="p-rounds">0</span> · Net: <span class="net" id="p-net">+0</span></div>
+      </div>
+      <div id="p-hist-body"><div class="hist-empty">No rounds yet</div></div>
+    </div>
+  </div>
+
+  
+  <div class="toast" id="toast"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyA3CoNXjSDWo_mTz8yvLEFW4povUREWSqc",
+  authDomain: "lucky-7-casino.firebaseapp.com",
+  databaseURL: "https://lucky-7-casino-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "lucky-7-casino",
+  storageBucket: "lucky-7-casino.firebasestorage.app",
+  messagingSenderId: "872674758699",
+  appId: "1:872674758699:web:1d9b74a4abc5588f4d1a6e"
+};
+firebase.initializeApp(firebaseConfig);
+const fdb = firebase.database();
+const ROOT = 'ab'; // andar bahar namespace
+
+const BET_WINDOW = 10, LOCK_AT = 4;
+let session = { role: null, username: null };
+let chip = 100, myBets = { andar: 0, bahar: 0 }, myExpo = 0;
+let lastRoundId = null, lastResultId = null;
+let engineTimer = null, nextRoundTimer = null;
+let roundCache = null, historyCache = [], settingsCache = { autoRounds: true, autoGap: 4 };
+let usersCache = {}, localHist = [];
+let dealAnimBusy = false; let lastDealKey = null;
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._id);t._id=setTimeout(()=>t.classList.remove('show'),2500)}
+function label(r){return r==='andar'?'ANDAR':'BAHAR'}
+function cardHTML(c, joker){
+  return `<div class="mini-card ${c.color}${joker?' joker':''}"><div>${c.display}</div><div class="s">${c.suit}</div></div>`;
+}
+function randCard(){
+  const suits=[{s:'♠',c:'black'},{s:'♥',c:'red'},{s:'♦',c:'red'},{s:'♣',c:'black'}];
+  const suit=suits[Math.floor(Math.random()*4)];
+  const rank=[1,2,3,4,5,6,7,8,9,10,11,12,13][Math.floor(Math.random()*13)];
+  const display=rank===1?'A':rank===11?'J':rank===12?'Q':rank===13?'K':String(rank);
+  return {rank,display,suit:suit.s,color:suit.c};
+}
+function buildDeal(winner, fixedJoker){
+  const joker = fixedJoker || randCard();
+  const andar = [], bahar = [];
+  // Match appears on Nth card of the winning side (N = 1..7)
+  const matchOn = 1 + Math.floor(Math.random() * 7);
+  const suits=['♠','♥','♦','♣'];
+  for(let i=1;i<=matchOn;i++){
+    if(i < matchOn){
+      // non-matching cards both sides as we go
+      let a=randCard(); while(a.rank===joker.rank) a=randCard();
+      let b=randCard(); while(b.rank===joker.rank) b=randCard();
+      if(winner==='andar'){
+        andar.push(a);
+        if(i < matchOn) bahar.push(b); // bahar trails by at most 0 when andar wins on this card
+      } else {
+        andar.push(a);
+        bahar.push(b);
+      }
+    } else {
+      // i === matchOn — winning card
+      const winSuit=suits[Math.floor(Math.random()*4)];
+      const winCard={rank:joker.rank,display:joker.display,suit:winSuit,color:(winSuit==='♥'||winSuit==='♦')?'red':'black'};
+      if(winner==='andar'){
+        // Andar gets the match; Bahar has matchOn-1 cards already
+        andar.push(winCard);
+      } else {
+        // Bahar wins: both sides had matchOn-1 non-match, then bahar gets match
+        // need one more non-match on andar first this round? Standard: deal Andar then Bahar alternate
+        // For bahar win on Nth bahar card: andar has N cards (non-match), bahar has N-1 then match
+        let a=randCard(); while(a.rank===joker.rank) a=randCard();
+        andar.push(a);
+        bahar.push(winCard);
+      }
+    }
+  }
+  // Fix alternate deal realism for andar win:
+  // Rebuild cleaner:
+  return rebuildDeal(winner, joker, matchOn);
+}
+function rebuildDeal(winner, joker, matchOn){
+  const andar=[], bahar=[];
+  const suits=['♠','♥','♦','♣'];
+  // Alternate: 1st card Andar, 2nd Bahar, 3rd Andar...
+  // Andar wins on Andar card number matchOn (Andar cards count = matchOn)
+  // Bahar wins on Bahar card number matchOn
+  if(winner==='andar'){
+    for(let n=1;n<=matchOn;n++){
+      if(n<matchOn){
+        let a=randCard(); while(a.rank===joker.rank) a=randCard();
+        andar.push(a);
+        let b=randCard(); while(b.rank===joker.rank) b=randCard();
+        bahar.push(b);
+      } else {
+        const winSuit=suits[Math.floor(Math.random()*4)];
+        andar.push({rank:joker.rank,display:joker.display,suit:winSuit,color:(winSuit==='♥'||winSuit==='♦')?'red':'black'});
+      }
+    }
+  } else {
+    for(let n=1;n<=matchOn;n++){
+      let a=randCard(); while(a.rank===joker.rank) a=randCard();
+      andar.push(a);
+      if(n<matchOn){
+        let b=randCard(); while(b.rank===joker.rank) b=randCard();
+        bahar.push(b);
+      } else {
+        const winSuit=suits[Math.floor(Math.random()*4)];
+        bahar.push({rank:joker.rank,display:joker.display,suit:winSuit,color:(winSuit==='♥'||winSuit==='♦')?'red':'black'});
+      }
+    }
+  }
+  return { joker, andar, bahar, winner, matchOn };
+}
+
+
+async function initGameState(){
+  try{
+    const st=await fdb.ref(ROOT+'/settings').once('value');
+    if(!st.exists()) await fdb.ref(ROOT+'/settings').set({autoRounds:true,autoGap:4});
+    const rd=await fdb.ref(ROOT+'/round').once('value');
+    if(!rd.exists()) await fdb.ref(ROOT+'/round').set({id:null,phase:'idle',timer:0,result:null,decided:false,pendingResult:null,bets:{}});
+  }catch(e){ console.warn('game state init',e); }
+}
+function startListeners(){
+  fdb.ref(ROOT+'/round').on('value',s=>{roundCache=s.val()||{phase:'idle',timer:0,bets:{}};onRoundUpdate()});
+  fdb.ref(ROOT+'/history').limitToLast(20).on('value',s=>{
+    const v=s.val()||{};
+    historyCache=Object.keys(v).map(k=>({key:k,...v[k]})).sort((a,b)=>(b.time||0)-(a.time||0));
+    renderLastDots('p-last-dots',historyCache.slice(0,8));
+    renderLastDots('a-last-dots',historyCache.slice(0,8));
+    if(session.role==='player') renderPlayerHistory();
+  });
+  fdb.ref(ROOT+'/settings').on('value',s=>{
+    settingsCache=s.val()||{autoRounds:true,autoGap:4};
+    const ar=document.getElementById('auto-rounds'), ag=document.getElementById('auto-gap');
+    if(ar) ar.value=settingsCache.autoRounds?'1':'0';
+    if(ag) ag.value=settingsCache.autoGap||4;
+    ensureAutoEngine();
+  });
+  fdb.ref(ROOT+'/users').on('value',s=>{
+    usersCache=s.val()||{};
+    if(session.role==='player'&&session.username&&usersCache[session.username]){
+      document.getElementById('p-coins').textContent=Number(usersCache[session.username].coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    }
+  });
+}
+document.getElementById('login-status').textContent='Connecting…';
+initGameState().then(()=>{startListeners();tryTokenAccess()}).catch(e=>{ console.error(e); tryTokenAccess(); });
+
+
+function getQuery(){
+  const q={};
+  (location.search||'').slice(1).split('&').forEach(part=>{
+    if(!part) return;
+    const i=part.indexOf('=');
+    const k=decodeURIComponent(i<0?part:part.slice(0,i));
+    const v=decodeURIComponent(i<0?'':part.slice(i+1));
+    if(k) q[k]=v;
+  });
+  return q;
+}
+async function enterPlayer(u, libraCoins){
+  session.role='player';
+  session.username=u;
+  const snap=await fdb.ref(ROOT+'/users/'+u).once('value');
+  let coins = 0;
+  if(libraCoins !== undefined && libraCoins !== null && !isNaN(Number(libraCoins))){
+    coins = Math.max(0, Math.floor(Number(libraCoins)));
+  } else if(snap.exists()){
+    coins = snap.val().coins || 0;
+  } else {
+    coins = 0;
+  }
+  // Sync Libra coins into this game wallet
+  await fdb.ref(ROOT+'/users/'+u).set({
+    pass: 'token',
+    coins: coins,
+    isAdmin: false,
+    fromLibra: true
+  });
+  
+  
+  document.getElementById('player-app').classList.remove('hidden');
+  const el=document.getElementById('player-username');
+  if(el) el.textContent=u;
+  const pc=document.getElementById('p-coins');
+  if(pc) pc.textContent=Number(coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  myBets={andar:0,bahar:0}; myExpo=0; lastRoundId=null; lastResultId=null;
+  try{ localHist=JSON.parse(localStorage.getItem('abhist_'+u)||'[]'); }catch(e){ localHist=[]; }
+  onRoundUpdate();
+  renderPlayerHistory();
+}
+async function doLogin(){}
+function doLogout(){
+  session={role:null,username:null};
+  document.getElementById('player-app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  const st=document.getElementById('login-status');
+  if(st) st.innerHTML='Open from <b style="color:#f5c518">Libra 24</b>';
+}
+
+
+
+
+
+
+
+
+
+function stopEngine(){
+  if(engineTimer){clearInterval(engineTimer);engineTimer=null}
+  if(nextRoundTimer){clearTimeout(nextRoundTimer);nextRoundTimer=null}
+}
+async function autoStartRound(){
+  const r=roundCache||{};
+  if(r.phase==='betting'||r.phase==='locked'||r.phase==='waiting'||r.phase==='dealing'){toast('Round running');return}
+  stopEngine();
+  const rid=Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999);
+  const earlyJoker = randCard();
+  await fdb.ref(ROOT+'/round').set({
+    id:rid,phase:'betting',timer:BET_WINDOW,
+    result:null,deal:null,joker:earlyJoker,jokerShown:false,
+    decided:false,pendingResult:null,bets:{}
+  });
+  startEngineTick();
+  toast('Round started');
+}
+function startEngineTick(){
+  if(engineTimer)clearInterval(engineTimer);
+  engineTimer=setInterval(async()=>{
+    
+    const snap=await fdb.ref(ROOT+'/round').once('value');
+    const r=snap.val();
+    if(!r||(r.phase!=='betting'&&r.phase!=='locked')){clearInterval(engineTimer);engineTimer=null;return}
+    let timer=Math.max(0,(r.timer||0)-1);
+    let phase=r.phase;
+    if(timer===LOCK_AT&&phase==='betting') phase='locked';
+    // At 8 sec remaining — reveal joker in middle for everyone
+    if(timer===8 && !r.jokerShown){
+      await fdb.ref(ROOT+'/round').update({ timer, phase, jokerShown: true });
+      return;
+    }
+    if(timer<=0&&!r.decided){
+      phase='waiting';timer=0;
+      await fdb.ref(ROOT+'/round').update({timer,phase});
+      clearInterval(engineTimer);engineTimer=null;
+      const final=r.pendingResult||smartAuto(r);
+      applyDecision(final,!r.pendingResult);
+      return;
+    }
+    await fdb.ref(ROOT+'/round').update({timer,phase});
+  },1000);
+}
+let masterForcedWinner = null; // set by Libra 24 master panel
+function smartAuto(r){
+  // Master force has highest priority
+  if(masterForcedWinner==='andar' || masterForcedWinner==='bahar'){
+    const w = masterForcedWinner;
+    masterForcedWinner = null;
+    return w;
+  }
+  const bets=r.bets||{};
+  let a=0,b=0;
+  Object.values(bets).forEach(x=>{a+=x.andar||0;b+=x.bahar||0});
+  if(a+b===0) return Math.random()<0.5?'andar':'bahar';
+  if(Math.random()<0.25) return Math.random()<0.5?'andar':'bahar';
+  return a<=b?'andar':'bahar'; // least exposure
+}
+
+async function applyDecision(result,isAuto){
+  stopEngine();
+  const snap=await fdb.ref(ROOT+'/round').once('value');
+  const r=snap.val();
+  if(!r||r.decided)return;
+  const deal=buildDeal(result, r.joker || null);
+  const bets=r.bets||{};
+  const updates={};
+  updates[ROOT+'/round/result']=result;
+  updates[ROOT+'/round/deal']=deal;
+  updates[ROOT+'/round/decided']=true;
+  updates[ROOT+'/round/phase']='dealing';
+  updates[ROOT+'/round/timer']=0;
+  updates[ROOT+'/round/pendingResult']=null;
+  // settle after deal shown — do coins now (result known)
+  for(const uname of Object.keys(bets)){
+    const bt=bets[uname];
+    if(bt[result]>0){
+      const win=Math.floor(bt[result]*1.95);
+      const cs=await fdb.ref(ROOT+'/users/'+uname+'/coins').once('value');
+      updates[ROOT+'/users/'+uname+'/coins']=(cs.val()||0)+win;
+    }
+  }
+  const hk=fdb.ref(ROOT+'/history').push().key;
+  updates[ROOT+'/history/'+hk]={result,joker:deal.joker,time:Date.now(),roundId:r.id};
+  await fdb.ref().update(updates);
+  // after short deal animation window, set phase result
+  setTimeout(async()=>{
+    await fdb.ref(ROOT+'/round/phase').set('result');
+    if(settingsCache.autoRounds){
+      const gap=(settingsCache.autoGap||4)*1000;
+      nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},gap);
+    }
+  }, Math.min(1200+(deal.andar.length+deal.bahar.length)*280, 4500));
+}
+function ensureAutoEngine(){
+  if(!settingsCache.autoRounds)return;
+  const r=roundCache||{};
+  if(r.phase==='idle'||r.phase==='result'){
+    if(!nextRoundTimer&&!engineTimer){
+      const gap=r.phase==='idle'?1000:(settingsCache.autoGap||4)*1000;
+      nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},gap);
+    }
+  }else if((r.phase==='betting'||r.phase==='locked')&&!engineTimer){
+    startEngineTick();
+  }else if(r.phase==='waiting'&&!r.decided){
+    const final=r.pendingResult||smartAuto(r);
+    applyDecision(final,!r.pendingResult);
+  }
+}
+
+
+async function tryTokenAccess(){
+  const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
+  const q=new URLSearchParams(location.search);
+  const token=(stored&&stored.token)||q.get('token')||'';
+  const user=(stored&&stored.username)||q.get('user')||q.get('username')||'';
+  libraToken=token;
+  if(!token||!user) return;
+  try{
+    const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,token,gameId:'andarbahar'})});
+    const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.message||'Access denied');
+    await enterPlayer(d.user.username,d.user.coins);
+  }catch(e){console.error(e);}
+}
+
+function selChip(el){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');chip=parseInt(el.dataset.v);
+}
+async function placeBet(type){
+  if(session.role!=='player'){ toast('Player only'); return; }
+  const r = roundCache;
+  if(!r || !r.id){ toast('No active round — wait for admin start'); return; }
+  if(r.phase!=='betting'){ toast('Betting closed ('+(r.phase||'?')+')'); return; }
+  const u = session.username;
+  if(!u){ toast('Not logged in'); return; }
+  const amount = Number(chip) || 100;
+  try{
+    const snap = await fdb.ref(ROOT+'/users/'+u).once('value');
+    const user = snap.val();
+    const bal = Number(user && user.coins != null ? user.coins : 0);
+    if(!user){ toast('User not found in game DB'); return; }
+    if(bal < amount){ toast('Not enough coins ('+bal+')'); return; }
+    const newBal = bal - amount;
+    await fdb.ref(ROOT+'/users/'+u+'/coins').set(newBal);
+    const curSnap = await fdb.ref(ROOT+'/round/bets/'+u).once('value');
+    const cur = curSnap.val() || {andar:0,bahar:0};
+    cur[type] = (Number(cur[type])||0) + amount;
+    await fdb.ref(ROOT+'/round/bets/'+u).set(cur);
+    myBets[type] = (Number(myBets[type])||0) + amount;
+    myExpo = (Number(myBets.andar)||0) + (Number(myBets.bahar)||0);
+    const amtEl = document.getElementById('amt-'+type);
+    if(amtEl) amtEl.textContent = myBets[type];
+    const betEl = document.getElementById('bet-'+type);
+    if(betEl) betEl.classList.add('selected');
+    const expo = document.getElementById('p-expo');
+    if(expo) expo.textContent = myExpo;
+    const pc = document.getElementById('p-coins');
+    if(pc) pc.textContent = Number(newBal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    toast('Bet ₹'+amount+' on '+label(type));
+    try{
+      const so = window.__l24socket;
+      if(so) so.emit('live_bet', {
+        gameId: 'andarbahar',
+        username: u,
+        side: type==='andar'?'Andar':'Bahar',
+        amount: amount,
+        roundId: (roundCache && roundCache.id) || null
+      });
+    }catch(_e){}
+  }catch(e){
+    console.error(e);
+    toast('Bet failed: '+(e.message||e));
+  }
+}
+
+async function animateDeal(deal){
+  if(!deal||dealAnimBusy) return;
+  dealAnimBusy=true;
+  const jEl=document.getElementById('p-joker');
+  const aEl=document.getElementById('p-andar-cards');
+  const bEl=document.getElementById('p-bahar-cards');
+  if(!jEl||!aEl||!bEl){dealAnimBusy=false;return;}
+  jEl.innerHTML=cardHTML(deal.joker,true);
+  aEl.innerHTML=''; bEl.innerHTML='';
+  await new Promise(r=>setTimeout(r,400));
+  const maxL=Math.max(deal.andar.length,deal.bahar.length);
+  for(let i=0;i<maxL;i++){
+    if(deal.andar[i]) aEl.innerHTML+=cardHTML(deal.andar[i],false);
+    await new Promise(r=>setTimeout(r,1200));
+    if(deal.bahar[i]) bEl.innerHTML+=cardHTML(deal.bahar[i],false);
+    await new Promise(r=>setTimeout(r,300));
+  }
+  dealAnimBusy=false;
+}
+
+function resetBoard(){
+  const j=document.getElementById('p-joker');
+  const a=document.getElementById('p-andar-cards');
+  const b=document.getElementById('p-bahar-cards');
+  if(j) j.innerHTML='<div class="card-back-sm" style="width:56px;height:80px">♠</div>';
+  if(a) a.innerHTML='<div class="card-back-sm">♠</div>';
+  if(b) b.innerHTML='<div class="card-back-sm">♠</div>';
+}
+
+function onRoundUpdate(){
+  const r=roundCache||{phase:'idle',timer:0,bets:{}};
+  if(session.role==='player'){
+    if(r.id&&r.id!==lastRoundId){
+      lastRoundId=r.id;lastResultId=null;
+      myBets={andar:0,bahar:0};myExpo=0;dealAnimBusy=false;
+      ['andar','bahar'].forEach(k=>{
+        const a=document.getElementById('amt-'+k);if(a)a.textContent='0';
+        const b=document.getElementById('bet-'+k);if(b)b.classList.remove('selected');
+      });
+      resetBoard();
+      if(r.bets&&r.bets[session.username]){
+        const bt=r.bets[session.username];
+        myBets={andar:bt.andar||0,bahar:bt.bahar||0};
+        myExpo=myBets.andar+myBets.bahar;
+        ['andar','bahar'].forEach(k=>{
+          document.getElementById('amt-'+k).textContent=myBets[k];
+          if(myBets[k]>0) document.getElementById('bet-'+k).classList.add('selected');
+        });
+        document.getElementById('p-expo').textContent=myExpo;
+      }
+    }
+    document.getElementById('p-round-id').textContent='ROUND ID: '+(r.id||'—');
+    const sr=document.getElementById('p-stage-round');
+    if(sr) sr.textContent=r.id?('ID '+r.id):'';
+    document.getElementById('p-timer').textContent=(r.timer>0?r.timer:0)+'s';
+    document.getElementById('p-expo').textContent=myExpo;
+    const canBet=r.phase==='betting';
+    document.querySelectorAll('.main-bet').forEach(b=>canBet?b.classList.remove('disabled'):b.classList.add('disabled'));
+
+    // Middle JOKER card — show as soon as round has joker
+    const jEl = document.getElementById('p-joker');
+    if(jEl){
+      if(r.joker && r.phase && r.phase!=='idle'){
+        // Always open middle card when round is live
+        jEl.innerHTML = cardHTML(r.joker, true);
+      } else if(r.phase==='idle' || !r.joker){
+        jEl.innerHTML = '<div class="card-back-sm" style="width:56px;height:80px">♠</div>';
+      }
+    }
+
+    if((r.phase==='dealing'||r.phase==='result')&&r.deal){
+      if(r.phase==='dealing') {
+        var dk=(r.id||'')+'-'+(r.phase||''); if(lastDealKey!==dk){ lastDealKey=dk; animateDeal(r.deal); }
+        document.getElementById('p-result-line').textContent='';
+      } else {
+        const d=r.deal;
+        document.getElementById('p-joker').innerHTML=cardHTML(d.joker,true);
+        document.getElementById('p-andar-cards').innerHTML=d.andar.map(c=>cardHTML(c,false)).join('');
+        document.getElementById('p-bahar-cards').innerHTML=d.bahar.map(c=>cardHTML(c,false)).join('');
+        const won=myBets[r.result]||0;
+        const total=myBets.andar+myBets.bahar;
+        const winAmt=won>0?Math.floor(won*1.95):0;
+        const pl=winAmt-total;
+        document.getElementById('p-result-line').innerHTML=
+          `<span class="win">${label(r.result)} Wins!</span> | P/L: <span class="pl ${pl<0?'neg':''}">${pl>=0?'+':''}${pl}</span>`;
+        if(lastResultId!==r.id){
+          lastResultId=r.id;
+          const bal=usersCache[session.username]?usersCache[session.username].coins:0;
+          pushLocalHist({result:r.result,resultLabel:label(r.result),betStr:`A:${myBets.andar} B:${myBets.bahar}`,amt:total,pl,bal,
+            joker:r.deal&&r.deal.joker?r.deal.joker.display+r.deal.joker.suit:'—'});
+          renderPlayerHistory();
+        }
+      }
+    } else if(r.phase!=='dealing'&&r.phase!=='result'){
+      document.getElementById('p-result-line').textContent='';
+    }
+  }
+  
+}
+
+function renderLastDots(id,hist){
+  const el=document.getElementById(id);if(!el)return;
+  if(!hist.length){el.innerHTML='<span style="color:#64748b;font-size:.8rem">—</span>';return}
+  el.innerHTML=hist.map(h=>{
+    const t=h.result==='andar'?'A':'B';
+    return `<div class="lr-dot ${h.result}">${t}</div>`;
+  }).join('');
+}
+function pushLocalHist(e){
+  try{
+    let h=JSON.parse(localStorage.getItem('abhist_'+session.username)||'[]');
+    h.unshift(e);if(h.length>40)h=h.slice(0,40);
+    localStorage.setItem('abhist_'+session.username,JSON.stringify(h));localHist=h;
+  }catch(e){}
+}
+function renderPlayerHistory(){
+  const body=document.getElementById('p-hist-body');if(!body)return;
+  try{localHist=JSON.parse(localStorage.getItem('abhist_'+session.username)||'[]')}catch(e){}
+  const rows=localHist.slice(0,20);
+  document.getElementById('p-rounds').textContent=rows.length;
+  const net=rows.reduce((s,r)=>s+(r.pl||0),0);
+  document.getElementById('p-net').textContent=(net>=0?'+':'')+net;
+  document.getElementById('p-net').style.color=net>=0?'#22c55e':'#ef4444';
+  if(!rows.length){
+    if(!historyCache.length){body.innerHTML='<div class="hist-empty">No rounds yet</div>';return}
+    body.innerHTML=`<table class="hist-table"><thead><tr><th>#</th><th>Joker</th><th>Result</th><th>Amt</th><th>P/L</th></tr></thead><tbody>`+
+      historyCache.slice(0,8).map((h,i)=>{
+        const j=h.joker?h.joker.display+h.joker.suit:'—';
+        return `<tr><td>${i+1}</td><td>${j}</td><td>${label(h.result)}</td><td>0</td><td class="pl-pos">+0</td></tr>`;
+      }).join('')+'</tbody></table>';
+    return;
+  }
+  body.innerHTML=`<table class="hist-table"><thead><tr><th>#</th><th>Joker</th><th>Result</th><th>Bet</th><th>Amt</th><th>P/L</th><th>Bal</th></tr></thead><tbody>`+
+    rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.joker||'—'}</td><td>${r.resultLabel||r.result}</td><td>${r.betStr||'—'}</td><td>${r.amt||0}</td><td class="${r.pl>=0?'pl-pos':'pl-neg'}">${(r.pl>=0?'+':'')+r.pl}</td><td>${r.bal!=null?r.bal:'—'}</td></tr>`).join('')+'</tbody></table>';
+}
+</script>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+window.socketioGameBoot=function(user,token){
+  try{ const so=window.__l24socket||(window.__l24socket=io()); so.emit('auth',{username:user.username,token},function(res){if(!res.success){location.href='/login';return;}});
+    so.emit('join_game_room',{gameId:'andarbahar'});
+    so.on('games_updated',function(gs){ const g=gs && gs['andarbahar']; if(g && !g.active) location.href='/dashboard'; });
+    so.on('master_force_result', function(d){ if(d && d.gameId==='andarbahar'){ masterForcedWinner = (d.winner==='Andar'?'andar':(d.winner==='Bahar'?'bahar':d.winner)) || null; }});
+    so.on('live_game_update', function(g){ if(g && g.id==='andarbahar' && g.forcedWinner){ masterForcedWinner = (g.forcedWinner==='Andar'?'andar':(g.forcedWinner==='Bahar'?'bahar':g.forcedWinner)); }});
+  }catch(e){}
+};
+</script>
+
+<script>
+(function(){
+  const GAME_ID='andarbahar';
+  async function boot(){
+    const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
+    const q=new URLSearchParams(location.search);
+    const token=(stored&&stored.token)||q.get('token')||'';
+    const username=(stored&&stored.username)||q.get('user')||q.get('username')||'';
+    if(!token||!username){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px">Open this game from your Libra 24 dashboard.</p></div></div>`; return; }
+    try{
+      const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:GAME_ID})});
+      const data=await r.json();
+      if(!r.ok||!data.success) throw new Error(data.message||'Access denied');
+      window.LIBRA_GAME_SESSION=data.user; window.LIBRA_GAME_TOKEN=token;
+      if(window.socketioGameBoot) window.socketioGameBoot(data.user,token);
+      if(window.tryTokenAccess) await window.tryTokenAccess();
+    }catch(e){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px;color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;margin-top:16px;padding:11px 18px;border:1px solid #555;background:#fff;color:#000;border-radius:10px;font-weight:700">Back to Libra 24</a></div></div>`; }
+  }
+  window.addEventListener('DOMContentLoaded',boot);
+})();
+</script>
+</body>
+</html>
 
