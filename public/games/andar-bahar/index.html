@@ -482,7 +482,7 @@ async function autoStartRound(){
 function startEngineTick(){
   if(engineTimer)clearInterval(engineTimer);
   engineTimer=setInterval(async()=>{
-    
+    try{
     const snap=await fdb.ref(ROOT+'/round').once('value');
     const r=snap.val();
     if(!r||(r.phase!=='betting'&&r.phase!=='locked')){clearInterval(engineTimer);engineTimer=null;return}
@@ -503,6 +503,7 @@ function startEngineTick(){
       return;
     }
     await fdb.ref(ROOT+'/round').update({timer,phase});
+    }catch(e){ console.error('engine tick err', e); }
   },1000);
 }
 let masterForcedWinner = null; // set by Libra 24 master panel
@@ -522,7 +523,9 @@ function smartAuto(r){
 }
 
 async function applyDecision(result,isAuto){
+  /* LIBRA_APPLY_GUARD */
   stopEngine();
+  try{
   const snap=await fdb.ref(ROOT+'/round').once('value');
   const r=snap.val();
   if(!r||r.decided)return;
@@ -549,12 +552,21 @@ async function applyDecision(result,isAuto){
   await fdb.ref().update(updates);
   // after short deal animation window, set phase result
   setTimeout(async()=>{
-    await fdb.ref(ROOT+'/round/phase').set('result');
-    if(settingsCache.autoRounds){
-      const gap=(settingsCache.autoGap||4)*1000;
-      nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},gap);
-    }
-  }, Math.min(1200+(deal.andar.length+deal.bahar.length)*280, 4500));
+    try{
+      await fdb.ref(ROOT+'/round/phase').set('result');
+      if(settingsCache.autoRounds){
+        const gap=(settingsCache.autoGap||4)*1000;
+        nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},gap);
+      }
+    }catch(e){ console.error(e); try{ autoStartRound(); }catch(_e){} }
+  }, Math.min(1200+(((deal&&deal.andar)||[]).length+((deal&&deal.bahar)||[]).length)*280, 4500));
+  }catch(e){
+    console.error('applyDecision failed', e);
+    try{
+      await fdb.ref(ROOT+'/round').update({ phase:'result', decided:true, timer:0 });
+      setTimeout(function(){ try{ autoStartRound(); }catch(_e){} }, 2000);
+    }catch(_e){}
+  }
 }
 function ensureAutoEngine(){
   if(!settingsCache.autoRounds)return;
@@ -640,6 +652,7 @@ async function placeBet(type){
 
 async function animateDeal(deal){
   if(!deal||dealAnimBusy) return;
+  deal.andar = deal.andar || []; deal.bahar = deal.bahar || [];
   dealAnimBusy=true;
   const jEl=document.getElementById('p-joker');
   const aEl=document.getElementById('p-andar-cards');
@@ -851,5 +864,53 @@ h1,h2,h3{font-size:14px!important}
 }
 </style>
 
+<script>
+/* ===== LIBRA STABILITY FIX: watchdog + null-safe ===== */
+(function(){
+  var stuckSince = 0;
+  var lastPhase = '';
+  setInterval(function(){
+    try{
+      var r = (typeof roundCache!=='undefined' && roundCache) ? roundCache : null;
+      if(!r) return;
+      var ph = r.phase || 'idle';
+      if(ph !== lastPhase){ lastPhase = ph; stuckSince = Date.now(); }
+      var stuckMs = Date.now() - stuckSince;
+      // stuck in waiting/dealing too long → force recover
+      if((ph==='waiting' || ph==='dealing') && stuckMs > 18000){
+        console.warn('[libra] stuck phase', ph, 'recovering');
+        stuckSince = Date.now();
+        try{
+          if(typeof stopEngine==='function') stopEngine();
+          if(typeof fdb!=='undefined' && typeof ROOT!=='undefined'){
+            fdb.ref(ROOT+'/round').update({
+              phase: 'result',
+              decided: true,
+              timer: 0
+            }).catch(function(){});
+          }
+          setTimeout(function(){
+            try{ if(typeof autoStartRound==='function') autoStartRound(); }catch(e){}
+          }, 1500);
+        }catch(e){ console.error(e); }
+      }
+      // idle too long with auto on → start
+      if((ph==='idle' || ph==='result') && stuckMs > 8000){
+        try{
+          if(typeof settingsCache!=='undefined' && settingsCache.autoRounds!==false){
+            if(typeof engineTimer!=='undefined' && !engineTimer && typeof nextRoundTimer!=='undefined' && !nextRoundTimer){
+              if(typeof autoStartRound==='function') autoStartRound();
+            }
+          }
+        }catch(e){}
+      }
+      // betting/locked without engine → restart engine
+      if((ph==='betting'||ph==='locked') && typeof engineTimer!=='undefined' && !engineTimer){
+        try{ if(typeof startEngineTick==='function') startEngineTick(); }catch(e){}
+      }
+    }catch(e){ console.error('[libra watchdog]', e); }
+  }, 3000);
+})();
+</script>
 </body>
 </html>
