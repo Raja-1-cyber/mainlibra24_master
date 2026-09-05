@@ -168,6 +168,7 @@
   <script>
     const socket = io();
     let user = null, allUsers = {}, allGames = {}, settings = {};
+    let liveGamesCache = {};
 
     try {
       user = JSON.parse(localStorage.getItem('l24'));
@@ -410,12 +411,22 @@ function saveGame(id) {
     });
     socket.on('live_bet', data => {
       const box = document.getElementById('liveBets');
+      if (!box) return;
       if (box.querySelector('div[style]')) box.innerHTML = '';
       const div = document.createElement('div');
       div.className = 'live-bet';
-      div.innerHTML = `<span><b>${data.username||'?'}</b> → ${data.game||''} / ${data.bet||''}</span><span style="color:#d4af37">₹${data.amount||0}</span>`;
+      div.innerHTML = `<span><b>${data.username||'?'}</b> → ${data.game||data.gameId||''} / ${data.bet||data.side||''}</span><span style="color:#d4af37">₹${data.amount||0}</span>`;
       box.insertBefore(div, box.firstChild);
       while (box.children.length > 40) box.removeChild(box.lastChild);
+      if (data.gameId && data.sides) {
+        const prev = liveGamesCache[data.gameId] || { id: data.gameId, name: data.game || data.gameId, sides: {} };
+        liveGamesCache[data.gameId] = Object.assign({}, prev, {
+          sides: data.sides,
+          roundId: data.roundId || prev.roundId,
+          phase: 'betting'
+        });
+        if (typeof renderLiveGames === 'function') renderLiveGames();
+      }
     });
 
     const SIDE_ORDER = {
