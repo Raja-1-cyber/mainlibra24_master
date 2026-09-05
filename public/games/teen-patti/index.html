@@ -192,9 +192,7 @@ body{background:#050505!important;color:#f5f5f5!important}.brand-bar,.game-bar,.
       <div class="result-line" id="p-result-line"></div>
     </div>
     <div class="chip-bar">
-      <div class="chip c10 active" data-v="10" onclick="selChip(this)">10</div>
-      <div class="chip c50" data-v="50" onclick="selChip(this)">50</div>
-      <div class="chip c100" data-v="100" onclick="selChip(this)">100</div>
+<div class="chip c100 active" data-v="100" onclick="selChip(this)">100</div>
       <div class="chip c500" data-v="500" onclick="selChip(this)">500</div>
       <div class="chip c1k" data-v="1000" onclick="selChip(this)">1K</div>
       <div class="chip c2k" data-v="2000" onclick="selChip(this)">2K</div>
@@ -239,7 +237,7 @@ const fdb=firebase.database();
 const ROOT='tp';
 const BET_WINDOW=10,LOCK_AT=4;
 let session={role:null,username:null};
-let chip=10,myBets={a:0,b:0},myExpo=0;
+let chip = 100,myBets={a:0,b:0},myExpo=0;
 let lastRoundId=null,lastResultId=null,dealAnimBusy=false;
 let engineTimer=null,nextRoundTimer=null;
 let roundCache=null,historyCache=[],settingsCache={autoRounds:true,autoGap:4};
@@ -400,7 +398,7 @@ function startListeners(){
   fdb.ref(ROOT+'/users').on('value',s=>{
     usersCache=s.val()||{};
     if(session.role==='player'&&session.username&&usersCache[session.username])
-      document.getElementById('p-coins').textContent=Number(usersCache[session.username].coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      var _pc=document.getElementById('p-coins'); if(_pc) _pc.textContent=Number(usersCache[session.username].coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   });
 }
 initGameState().then(()=>{startListeners();tryTokenAccess()}).catch(e=>{console.error(e);tryTokenAccess()});
@@ -847,6 +845,26 @@ h1,h2,h3{font-size:14px!important}
       }
     }catch(e){ console.error('[libra watchdog]', e); }
   }, 3000);
+})();
+</script>
+
+<script>
+/* LIBRA_FORCE_ENGINE */
+(function(){
+  function kick(){
+    try{
+      if(typeof ensureAutoEngine==='function') ensureAutoEngine();
+      else if(typeof autoStartRound==='function'){
+        var r=typeof roundCache!=='undefined'?roundCache:{};
+        var ph=(r&&r.phase)||'idle';
+        if((ph==='idle'||ph==='result') && typeof engineTimer!=='undefined' && !engineTimer)
+          autoStartRound();
+        else if((ph==='betting'||ph==='locked') && !engineTimer && typeof startEngineTick==='function')
+          startEngineTick();
+      }
+    }catch(e){}
+  }
+  setTimeout(kick,1500); setInterval(kick,5000);
 })();
 </script>
 </body>
