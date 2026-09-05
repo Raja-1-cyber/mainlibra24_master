@@ -1,1 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Libra 24 - Games</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="top">
+    <div class="brand">LIBRA 24</div>
+    <div class="bal">Coins <span id="coins">0</span></div>
+  </div>
+  <div class="user-row">
+    <span id="uname">Player</span>
+    <button class="logout" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="section">
+    <h2>GAMES</h2>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let user = null;
+
+    try {
+      user = JSON.parse(localStorage.getItem('l24'));
+      if (!user || !user.token || user.role !== 'player') throw 0;
+    } catch {
+      location.href = '/login';
+    }
+
+    document.getElementById('uname').textContent = user.username;
+    document.getElementById('coins').textContent = Number(user.coins || 0).toLocaleString();
+
+    socket.emit('auth', { username: user.username, token: user.token }, res => {
+      if (!res.success) { localStorage.removeItem('l24'); location.href = '/login'; return; }
+      user.coins = res.user.coins;
+      document.getElementById('coins').textContent = Number(user.coins).toLocaleString();
+      socket.emit('get_state');
+    });
+
+    function renderGames(games) {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      Object.values(games || {}).filter(g => g.active).sort((a,b) => (a.order||0)-(b.order||0)).forEach(g => {
+        const card = document.createElement('div');
+        card.className = 'game-card';
+        card.onclick = () => enterGame(g.id);
+        const imgStyle = g.image ? `background-image:url('${g.image}')` : '';
+        card.innerHTML = `
+          <div class="game-img" style="${imgStyle}">
+            ${g.image ? '' : '<div class="game-placeholder">🎮</div>'}
+          </div>
+          <div class="game-name">${g.name}</div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function enterGame(gameId) {
+      socket.emit('player_enter_game', { gameId }, res => {
+        if (!res.success) return toast('Game not available');
+        if (res.url) {
+          const u = new URL(res.url, window.location.origin);
+          window.open(u.toString(), '_blank');
+        } else {
+          toast('Game URL not set by Master yet');
+        }
+      });
+    }
+
+    function toast(m) {
+      const t = document.getElementById('toast');
+      t.textContent = m;
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 3000);
+    }
+
+    function logout() {
+      localStorage.removeItem('l24');
+      location.href = '/login';
+    }
+
+    socket.on('player_state', d => {
+      if (d.coins !== undefined) {
+        user.coins = d.coins;
+        document.getElementById('coins').textContent = Number(d.coins).toLocaleString();
+        localStorage.setItem('l24', JSON.stringify(user));
+      }
+      renderGames(d.games);
+    });
+
+    socket.on('games_updated', renderGames);
+    socket.on('balance_update', d => {
+      if (d.username === user.username) {
+        user.coins = d.coins;
+        document.getElementById('coins').textContent = Number(d.coins).toLocaleString();
+        localStorage.setItem('l24', JSON.stringify(user));
+      }
+    });
+  </script>
+</body>
+</html>
 
