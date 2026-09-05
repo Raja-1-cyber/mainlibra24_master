@@ -1,1 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Libra 24 - Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="top">
+    <div class="brand">LIBRA 24 <span style="font-size:9px;letter-spacing:1px;color:#666;margin-left:8px">AGENT CONSOLE</span></div>
+    <div>
+      <span id="who" style="font-size:13px;margin-right:10px"></span>
+      <button class="logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-label">Your Share</div><div class="stat-value"><span id="share">0</span>%</div><div class="stat-sub">Configured by Master</div></div>
+    <div class="stat-card"><div class="stat-label">Team Credits</div><div class="stat-value" id="aCredits">0</div><div class="stat-sub">Recorded player credits</div></div>
+    <div class="stat-card"><div class="stat-label">Team Debits</div><div class="stat-value" id="aDebits">0</div><div class="stat-sub">Recorded player debits</div></div>
+    <div class="stat-card"><div class="stat-label">Team Net / Share</div><div class="stat-value" id="aNet">0</div><div class="stat-sub">Share result: <b id="aShareResult">0</b></div></div>
+  </div>
+
+  <div class="card">
+    <h3>CREATE PLAYER</h3>
+    <input id="pUser" placeholder="Username">
+    <input id="pPass" placeholder="Password">
+    <input id="pCoins" type="number" placeholder="Coins" value="1000">
+    <button class="btn-gold" onclick="createP()">Create</button>
+  </div>
+
+  <div class="card">
+    <h3>ADD / REMOVE COINS</h3>
+    <input id="cUser" placeholder="Username">
+    <input id="cAmt" type="number" placeholder="Amount (+/-)">
+    <button class="btn-green" onclick="coins()">Update</button>
+  </div>
+
+  <div class="card">
+    <h3>MY PLAYERS</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Username</th><th>Coins</th><th>Credit</th><th>Debit</th><th>Net</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody id="ptable"></tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <div class="history-toolbar"><div><h3>PLAYER TRANSACTION HISTORY</h3><div class="subtle">Only your assigned players are visible here.</div></div><input id="agentTxSearch" placeholder="Search player" oninput="renderAgentHistory()"></div>
+    <div class="table-wrap"><table class="history-table"><thead><tr><th>Time</th><th>Player</th><th>Type</th><th>Amount</th><th>Before</th><th>After</th><th>Actor</th></tr></thead><tbody id="agentTxTable"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="history-toolbar"><div><h3>GAME HISTORY</h3><div class="subtle">Recorded game-entry history for your players.</div></div><input id="agentGameSearch" placeholder="Search player / game" oninput="renderAgentHistory()"></div>
+    <div class="table-wrap"><table class="history-table"><thead><tr><th>Time</th><th>Player</th><th>Game</th><th>Coins at Entry</th></tr></thead><tbody id="agentGameTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <h3>NOTIFICATIONS</h3>
+    <div id="nlist">No activity yet</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let user = null, historyTransactions = [], historyGames = [];
+    try {
+      user = JSON.parse(localStorage.getItem('l24'));
+      if (!user || user.role !== 'agent') throw 0;
+    } catch { location.href = '/login'; }
+
+    document.getElementById('who').textContent = user.username;
+    document.getElementById('share').textContent = user.sharePercent || 0;
+
+    socket.emit('auth', { username: user.username, token: user.token }, res => {
+      if (!res.success) { localStorage.removeItem('l24'); location.href = '/login'; return; }
+      document.getElementById('share').textContent = res.user.sharePercent || 0;
+      socket.emit('get_state');
+    });
+
+    function logout(){ localStorage.removeItem('l24'); location.href='/login'; }
+
+    function createP(){
+      socket.emit('master_create_player', {
+        username: document.getElementById('pUser').value,
+        password: document.getElementById('pPass').value,
+        coins: document.getElementById('pCoins').value
+      }, res => {
+        alert(res.success ? 'Created' : (res.message||'Error'));
+        if(res.success){ document.getElementById('pUser').value=''; document.getElementById('pPass').value=''; }
+      });
+    }
+
+    function coins(){
+      socket.emit('update_coins', {
+        username: document.getElementById('cUser').value,
+        amount: document.getElementById('cAmt').value
+      }, res => alert(res.success ? 'Updated: '+res.coins : (res.message||'Error')));
+    }
+
+    function toggle(u, a){
+      socket.emit('toggle_user', { username: u, active: a }, () => {});
+    }
+
+    function renderAgentHistory(){
+      const tq=(document.getElementById('agentTxSearch')?.value||'').toLowerCase();
+      const gq=(document.getElementById('agentGameSearch')?.value||'').toLowerCase();
+      const tx=historyTransactions.filter(t=>`${t.username} ${t.actor} ${t.type}`.toLowerCase().includes(tq));
+      const gh=historyGames.filter(g=>`${g.username} ${g.game}`.toLowerCase().includes(gq));
+      const credit=historyTransactions.reduce((a,t)=>a+(t.delta>0?t.delta:0),0);
+      const debit=historyTransactions.reduce((a,t)=>a+(t.delta<0?Math.abs(t.delta):0),0);
+      const net=credit-debit, pct=Number(document.getElementById('share').textContent||0), shareResult=net*pct/100;
+      document.getElementById('aCredits').textContent=Number(credit).toLocaleString();
+      document.getElementById('aDebits').textContent=Number(debit).toLocaleString();
+      document.getElementById('aNet').textContent=Number(net).toLocaleString();
+      document.getElementById('aShareResult').textContent=Number(shareResult).toLocaleString(undefined,{maximumFractionDigits:2});
+      document.getElementById('agentTxTable').innerHTML=tx.length?tx.map(t=>`<tr><td>${new Date(t.time).toLocaleString()}</td><td>${t.username}</td><td><span class="pill">${t.type}</span></td><td>${t.delta>=0?'+':'-'}${Math.abs(t.delta).toLocaleString()}</td><td>${Number(t.before).toLocaleString()}</td><td>${Number(t.after).toLocaleString()}</td><td>${t.actor}</td></tr>`).join(''):'<tr><td colspan="7" class="history-empty">No transactions found</td></tr>';
+      document.getElementById('agentGameTable').innerHTML=gh.length?gh.map(g=>`<tr><td>${new Date(g.time).toLocaleString()}</td><td>${g.username}</td><td>${g.game}</td><td>${Number(g.coins).toLocaleString()}</td></tr>`).join(''):'<tr><td colspan="4" class="history-empty">No game history found</td></tr>';
+    }
+
+    socket.on('agent_state', d => {
+      const players = Object.values(d.users||{}).filter(u => u.role==='player');
+      document.getElementById('ptable').innerHTML = players.map(p => `
+        <tr>
+          <td>${p.username}</td>
+          <td>${Number(p.coins).toLocaleString()}</td>
+          <td>${Number(p.totalCredit||0).toLocaleString()}</td>
+          <td>${Number(p.totalDebit||0).toLocaleString()}</td>
+          <td class="net-box">${Number(p.netChange||0).toLocaleString()}</td>
+          <td>${p.isActive?'<span class="badge badge-player">Active</span>':'<span class="badge badge-off">Off</span>'}</td>
+          <td><button class="${p.isActive?'btn-red':'btn-green'}" style="padding:4px 8px;font-size:11px" onclick="toggle('${p.username}',${!p.isActive})">${p.isActive?'Terminate':'Activate'}</button></td>
+        </tr>`).join('') || '<tr><td colspan="7" class="history-empty">No players</td></tr>';
+      historyTransactions=d.transactions||[]; historyGames=d.gameHistory||[];
+      renderAgentHistory();
+      const n=d.notifications||[];
+      document.getElementById('nlist').innerHTML=n.length?n.map(x=>`<div class="notif">${x.text}<br><small class="subtle">${new Date(x.time).toLocaleString()}</small></div>`).join(''):'No activity yet';
+    });
+
+    socket.on('notification', n => {
+      const box = document.getElementById('nlist');
+      if (box.textContent.includes('No activity')) box.innerHTML = '';
+      box.insertAdjacentHTML('afterbegin', `<div class="notif">${n.text}<br><small style="color:#5a6a62">${new Date(n.time).toLocaleString()}</small></div>`);
+    });
+
+    socket.on('users_updated', () => socket.emit('get_state'));
+  </script>
+</body>
+</html>
 
