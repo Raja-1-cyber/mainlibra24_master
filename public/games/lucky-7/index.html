@@ -826,7 +826,7 @@ window.socketioGameBoot=function(user,token){
   try{ const so=window.__l24socket||(window.__l24socket=io()); so.emit('auth',{username:user.username,token},function(res){if(!res.success){location.href='/login';return;}});
     so.emit('join_game_room',{gameId:'lucky7'});
     so.on('games_updated',function(gs){ /* keep player in game even if flag races */ });
-    so.on('master_force_result', function(d){ if(d && d.gameId==='lucky7'){ masterForcedWinner = d.winner || null; }});
+    so.on('master_force_result', function(d){ if(d && d.gameId==='lucky7'){ if(window.__setForce) window.__setForce(d.winner); else masterForcedWinner=d.winner||null; }});
     so.on('live_game_update', function(g){ if(g && g.id==='lucky7' && g.forcedWinner){ masterForcedWinner = g.forcedWinner; }});
   }catch(e){}
 };
@@ -902,59 +902,79 @@ h1,h2,h3{font-size:14px!important}
 </style>
 
 
-<script>
-/* LIBRA_FORCE_ENGINE_OLD */
-(function(){
-  function kick(){
-    try{
-      if(typeof ensureAutoEngine==='function') ensureAutoEngine();
-      else if(typeof autoStartRound==='function'){
-        var r=typeof roundCache!=='undefined'?roundCache:{};
-        var ph=(r&&r.phase)||'idle';
-        if((ph==='idle'||ph==='result') && typeof engineTimer!=='undefined' && !engineTimer)
-          autoStartRound();
-        else if((ph==='betting'||ph==='locked') && !engineTimer && typeof startEngineTick==='function')
-          startEngineTick();
-      }
-    }catch(e){}
-  }
-  setTimeout(kick,1500); setInterval(kick,5000);
-})();
-</script>
+
+
+
+
 
 <script>
-/* ===== LIBRA LOCAL ENGINE (Lucky 7) ===== */
+/* ===== LIBRA LOCAL ENGINE v2 (Lucky 7) ===== */
 (function(){
-  if(window.__libraLocalEngine) return;
-  window.__libraLocalEngine = true;
-  var localTimer=null, localBusy=false;
+  if(window.__libraLocalV2) return;
+  window.__libraLocalV2 = true;
+  window.__localOwnsRound = true;
+
+  var localTimer=null, localBusy=false, localRoundId=null;
+
+  // Normalize master force values
+  window.__setForce = function(w){
+    if(!w){ window.masterForcedWinner=null; return; }
+    var s=String(w).toLowerCase().replace(/\s+/g,'');
+    if(s==='7down'||s==='down'||s==='7-down') window.masterForcedWinner='down';
+    else if(s==='7up'||s==='up'||s==='7-up') window.masterForcedWinner='up';
+    else if(s==='exact'||s==='exact7'||s==='7') window.masterForcedWinner='exact';
+    else window.masterForcedWinner=w;
+    console.log('[L7] force set', window.masterForcedWinner);
+  };
 
   function setRound(partial){
     roundCache = Object.assign({}, roundCache||{}, partial);
-    try{ onRoundUpdate(); }catch(e){}
+    try{ onRoundUpdate(); }catch(e){ console.warn(e); }
   }
   function stopLocal(){ if(localTimer){ clearInterval(localTimer); localTimer=null; } }
 
+  // Kill firebase engine + ignore remote overwrites during local
   window.stopEngine = function(){
     stopLocal();
-    try{ if(engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
-    try{ if(nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
+    try{ if(typeof engineTimer!=='undefined'&&engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
+    try{ if(typeof nextRoundTimer!=='undefined'&&nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
   };
 
-  function randL7Card(){
-    if(typeof drawCard==='function') try{ return drawCard(); }catch(e){}
-    var ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-    var suits=['♠','♥','♦','♣'];
-    var ri=Math.floor(Math.random()*13);
-    return { rank: ranks[ri], suit: suits[Math.floor(Math.random()*4)], value: ri+1, display: ranks[ri] };
-  }
+  // Patch master force listeners
+  try{
+    if(window.__l24socket){
+      window.__l24socket.off && window.__l24socket.off('master_force_result');
+    }
+  }catch(e){}
+
+  var _origBoot = window.socketioGameBoot;
+  window.socketioGameBoot = function(user, token){
+    try{ if(_origBoot) _origBoot(user, token); }catch(e){}
+    try{
+      var so = window.__l24socket || (window.__l24socket = io());
+      so.on('master_force_result', function(d){
+        if(d && d.gameId==='lucky7') window.__setForce(d.winner);
+      });
+      so.on('live_game_update', function(g){
+        if(g && g.id==='lucky7' && g.forcedWinner) window.__setForce(g.forcedWinner);
+      });
+    }catch(e){}
+  };
 
   window.autoStartRound = async function(){
     if(localBusy) return;
-    stopLocal();
-    var rid = Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999);
-    setRound({ id:rid, phase:'betting', timer:10, result:null, card:null, decided:false, pendingResult:null, bets:{} });
-    try{ if(typeof db!=='undefined') db.ref('round').set(roundCache).catch(function(){}); }catch(e){}
+    window.stopEngine();
+    localRoundId = 'L7-'+Date.now().toString(36).toUpperCase();
+    setRound({
+      id: localRoundId, phase:'betting', timer:10,
+      result:null, card:null, decided:false, pendingResult:null, bets: (roundCache&&roundCache.bets)||{}
+    });
+    // clear bets each new round
+    setRound({ bets:{} });
+    try{ if(typeof myBets!=='undefined'){ myBets={down:0,exact:0,up:0}; myExpo=0;
+      ['down','exact','up'].forEach(function(k){ var el=document.getElementById('amt-'+k); if(el) el.textContent='0'; var b=document.getElementById('bet-'+k); if(b) b.classList.remove('selected'); });
+      var ex=document.getElementById('p-expo'); if(ex) ex.textContent='0';
+    } }catch(e){}
     startLocalTick();
   };
 
@@ -964,36 +984,38 @@ h1,h2,h3{font-size:14px!important}
       try{
         var r=roundCache||{};
         if(r.phase!=='betting'&&r.phase!=='locked'){ stopLocal(); return; }
-        var timer=Math.max(0,(r.timer||0)-1), phase=r.phase;
-        if(timer===4&&phase==='betting') phase='locked';
+        var timer=Math.max(0,(Number(r.timer)||0)-1);
+        var phase=r.phase;
+        if(timer===4 && phase==='betting') phase='locked';
         if(timer<=0){
           stopLocal();
           setRound({timer:0, phase:'waiting'});
-          var w = (typeof masterForcedWinner!=='undefined' && masterForcedWinner) ? masterForcedWinner :
-            ((typeof smartAuto==='function')?smartAuto(r): (['down','exact','up'][Math.floor(Math.random()*3)]));
-          try{ masterForcedWinner=null; }catch(e){}
+          // DECISION: master force > smartAuto > random
+          var w = null;
+          if(window.masterForcedWinner){ w=window.masterForcedWinner; window.masterForcedWinner=null; }
+          else if(typeof smartAuto==='function'){ try{ w=smartAuto(r); }catch(e){} }
+          if(!w){ var x=Math.random(); w = x<0.08?'exact':(x<0.54?'up':'down'); }
           finishLocal(w);
           return;
         }
         setRound({timer:timer, phase:phase});
-      }catch(e){ console.error(e); }
+      }catch(e){ console.error('L7 tick',e); }
     },1000);
   }
 
-  async function finishLocal(winner){
+  function finishLocal(winner){
     localBusy=true;
     try{
-      var card = randL7Card();
-      // align result to card if possible
-      var val = card.value || 7;
-      if(val < 7) winner = 'down';
-      else if(val > 7) winner = 'up';
-      else winner = 'exact';
-      if(typeof masterForcedWinner!=='undefined' && false){}
+      // Card MUST match decision
+      var card = (typeof genCard==='function') ? genCard(winner) : {rank:7,display:'7',suit:'♠',color:'black'};
       setRound({ result:winner, card:card, decided:true, phase:'result', timer:0 });
+      // report to master
+      try{
+        var so=window.__l24socket;
+        if(so) so.emit('game_result_report',{gameId:'lucky7', roundId:localRoundId, winner:winner});
+      }catch(e){}
       localBusy=false;
       setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 4500);
-      try{ if(typeof db!=='undefined') db.ref('round').update({result:winner,card:card,decided:true,phase:'result',timer:0}).catch(function(){}); }catch(e){}
     }catch(e){
       console.error(e); localBusy=false;
       setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 2000);
@@ -1004,11 +1026,20 @@ h1,h2,h3{font-size:14px!important}
     var r=roundCache||{}, ph=r.phase||'idle';
     if(ph==='idle'||ph==='result'||!ph){ if(!localTimer&&!localBusy) window.autoStartRound(); }
     else if((ph==='betting'||ph==='locked')&&!localTimer) startLocalTick();
-    else if(ph==='waiting'&&!r.decided) finishLocal('down');
+    else if(ph==='waiting'&&!r.decided){
+      var w=window.masterForcedWinner||'down'; window.masterForcedWinner=null; finishLocal(w);
+    }
   };
 
-  setTimeout(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 800);
-  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 6000);
+  // Block firebase from overwriting local round mid-game
+  if(typeof db!=='undefined' && db.ref){
+    try{
+      db.ref('round').off();
+    }catch(e){}
+  }
+
+  setTimeout(function(){ window.ensureAutoEngine(); }, 1000);
+  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 7000);
 })();
 </script>
 
