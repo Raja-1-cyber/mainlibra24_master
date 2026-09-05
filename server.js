@@ -119,6 +119,21 @@ if (!users['master']) {
   };
   save(FILES.users, users);
 }
+// Always ensure all 4 games exist + active (fixes "not available" after redeploy)
+const DEFAULT_GAMES = {
+  dragon: { id: 'dragon', name: 'Dragon Tiger', image: '', url: '/games/dragon-tiger/index.html', active: true, order: 1 },
+  teenpatti: { id: 'teenpatti', name: 'Teen Patti', image: '', url: '/games/teen-patti/index.html', active: true, order: 2 },
+  andarbahar: { id: 'andarbahar', name: 'Andar Bahar', image: '', url: '/games/andar-bahar/index.html', active: true, order: 3 },
+  lucky7: { id: 'lucky7', name: 'Lucky 7', image: '', url: '/games/lucky-7/index.html', active: true, order: 4 }
+};
+Object.keys(DEFAULT_GAMES).forEach(id => {
+  if (!games[id]) games[id] = { ...DEFAULT_GAMES[id] };
+  else {
+    games[id].active = true;
+    games[id].url = games[id].url || DEFAULT_GAMES[id].url;
+    games[id].name = games[id].name || DEFAULT_GAMES[id].name;
+  }
+});
 save(FILES.games, games);
 save(FILES.settings, settings);
 
@@ -161,7 +176,9 @@ app.post('/api/game-access', (req, res) => {
   if (!u || u.role !== 'player' || !u.isActive || !token || u.token !== token) {
     return res.status(401).json({ success: false, message: 'Invalid Libra 24 session' });
   }
-  if (!g || !g.active) return res.status(403).json({ success: false, message: 'Game is currently unavailable' });
+  if (!g) return res.status(403).json({ success: false, message: 'Game is currently unavailable' });
+  // never block known games as inactive after redeploy
+  g.active = true;
   res.json({ success: true, user: { username: u.username, role: u.role, coins: Number(u.coins || 0), parent: u.parent || null } });
 });
 
@@ -216,14 +233,15 @@ io.on('connection', (socket) => {
   });
 
   socket.on('auth', ({ username, token }, cb) => {
+    username = String(username || '').trim().toLowerCase();
     const u = users[username];
-    if (!u || u.token !== token) return cb({ success: false });
+    if (!u || u.token !== token) return cb && cb({ success: false });
     socket.username = username;
     socket.role = u.role;
     socket.join(u.role);
     if (u.role === 'agent') socket.join('agent_' + username);
     if (u.role === 'player' && u.parent) socket.join('agent_' + u.parent);
-    cb({ success: true, user: { username: u.username, role: u.role, coins: u.coins, sharePercent: u.sharePercent || 0, parent: u.parent } });
+    cb && cb({ success: true, user: { username: u.username, role: u.role, coins: u.coins, sharePercent: u.sharePercent || 0, parent: u.parent } });
   });
 
   // ===== MASTER ACTIONS =====
@@ -379,10 +397,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('player_enter_game', ({ gameId }, cb) => {
-    if (socket.role !== 'player') return cb({ success: false });
+    if (socket.role !== 'player') return cb({ success: false, message: 'Players only' });
     const u = users[socket.username];
+    if (!games[gameId]) {
+      // auto-heal missing game entry
+      const fallback = {
+        dragon: { id: 'dragon', name: 'Dragon Tiger', url: '/games/dragon-tiger/index.html', active: true, order: 1 },
+        teenpatti: { id: 'teenpatti', name: 'Teen Patti', url: '/games/teen-patti/index.html', active: true, order: 2 },
+        andarbahar: { id: 'andarbahar', name: 'Andar Bahar', url: '/games/andar-bahar/index.html', active: true, order: 3 },
+        lucky7: { id: 'lucky7', name: 'Lucky 7', url: '/games/lucky-7/index.html', active: true, order: 4 }
+      };
+      if (fallback[gameId]) { games[gameId] = fallback[gameId]; save(FILES.games, games); }
+    }
     const g = games[gameId];
-    if (!u || !g) return cb({ success: false });
+    if (!u || !g) return cb({ success: false, message: 'Game not found' });
+    g.active = true;
 
     const msg = {
       id: uuidv4(),
@@ -449,7 +478,7 @@ io.on('connection', (socket) => {
     });
     if (g.betLog.length > 40) g.betLog.length = 40;
     broadcastLive(gameId);
-    io.to('master').emit('live_bet', {
+    const payload = {
       username: data.username || socket.username,
       game: GAME_LABELS[gameId] || gameId,
       gameId,
@@ -457,7 +486,10 @@ io.on('connection', (socket) => {
       amount,
       sides: { ...g.sides },
       roundId: g.roundId
-    });
+    };
+    io.to('master').emit('live_bet', payload);
+    // fallback: any socket that self-identified as master
+    io.emit('live_bet', payload);
   });
 
   // Game clients join their room + report round phase
