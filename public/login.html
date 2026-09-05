@@ -1,1 +1,46 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Libra 24</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="box">
+    <div class="logo">LIBRA 24</div>
+    <div class="sub">Gaming Platform</div>
+    <div class="err" id="err"></div>
+    <label>USERNAME</label>
+    <input type="text" id="user" placeholder="Enter username" autocomplete="username">
+    <label>PASSWORD</label>
+    <input type="password" id="pass" placeholder="Enter password" autocomplete="current-password">
+    <button onclick="login()">LOGIN</button>
+    <div class="footer">For ID contact your agent</div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    function login() {
+      const username = document.getElementById('user').value.trim();
+      const password = document.getElementById('pass').value;
+      if (!username || !password) return show('Username aur Password daalo');
+      socket.emit('login', { username, password }, res => {
+        if (!res.success) return show(res.message || 'Login failed');
+        localStorage.setItem('l24', JSON.stringify(res.user));
+        if (res.user.role === 'master') location.href = '/master';
+        else if (res.user.role === 'agent') location.href = '/agent';
+        else location.href = '/dashboard';
+      });
+    }
+    function show(m) {
+      const e = document.getElementById('err');
+      e.style.display = 'block';
+      e.textContent = m;
+    }
+    document.getElementById('pass').onkeypress = e => { if (e.key === 'Enter') login(); };
+    document.getElementById('user').onkeypress = e => { if (e.key === 'Enter') login(); };
+  </script>
+</body>
+</html>
