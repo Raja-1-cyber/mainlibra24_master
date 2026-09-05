@@ -1,1 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Lucky 7 - LIBRA 24</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --bg: #0b1220; --panel: #111827; --panel2: #0f172a;
+      --yellow: #f5c518; --yellow-dark: #d4a017;
+      --blue-btn: #2563eb; --green-btn: #16a34a; --gray-btn: #475569;
+      --red: #dc2626; --text: #f1f5f9; --muted: #94a3b8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    .hidden { display: none !important; }
+
+    #login-screen {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; background: linear-gradient(180deg, #0b1220 0%, #0f172a 100%);
+    }
+    .login-logo {
+      font-family: 'Orbitron', sans-serif; font-size: clamp(1.8rem, 6vw, 2.6rem); font-weight: 800;
+      color: var(--yellow); letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 24px rgba(245,197,24,0.4);
+    }
+    .login-sub { color: var(--muted); font-size: 0.85rem; letter-spacing: 4px; margin-bottom: 36px; text-transform: uppercase; }
+    .login-box {
+      background: var(--panel); border: 1px solid #334155; border-radius: 14px; padding: 28px 24px;
+      width: 100%; max-width: 360px; box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+    }
+    .login-box label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; letter-spacing: 0.5px; }
+    .login-box input {
+      width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid #334155;
+      background: #0b1220; color: var(--text); font-size: 0.95rem; margin-bottom: 16px; outline: none;
+    }
+    .login-box input:focus { border-color: var(--yellow); }
+    .login-btn {
+      width: 100%; padding: 13px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, var(--yellow), var(--yellow-dark));
+      color: #0b1220; font-weight: 700; font-size: 1rem; cursor: pointer;
+    }
+    .login-btn:hover { filter: brightness(1.08); }
+    .login-status { text-align: center; margin-top: 12px; font-size: 0.78rem; color: var(--muted); min-height: 20px; }
+
+    .brand-bar {
+      background: #0a0f1a; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;
+    }
+    .brand-bar .brand { color: var(--yellow); font-family: 'Orbitron', sans-serif; }
+    .brand-bar .right { display: flex; align-items: center; gap: 10px; }
+    .brand-bar .user-tag { color: var(--muted); font-size: 0.8rem; font-weight: 500; }
+    .btn-logout { background: var(--red); color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 0.78rem; cursor: pointer; }
+
+    .coins-bar {
+      background: var(--yellow); color: #0b1220; padding: 10px 16px; display: flex; justify-content: space-between;
+      align-items: center; font-weight: 800; font-size: 0.95rem; flex-wrap: wrap; gap: 8px;
+    }
+    .coins-bar .btn-bets {
+      background: var(--green-btn); color: #fff; border: none; padding: 6px 16px; border-radius: 6px;
+      font-weight: 700; font-size: 0.8rem; cursor: pointer;
+    }
+    .game-bar {
+      background: #0a0f1a; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.82rem; font-weight: 600; color: var(--muted); border-bottom: 1px solid #1e293b; flex-wrap: wrap; gap: 4px;
+    }
+    .game-bar .game-name { color: var(--text); letter-spacing: 1px; }
+    .game-bar .round-id { font-size: 0.72rem; color: #64748b; }
+
+    .stage {
+      background: #000; min-height: 260px; position: relative; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; overflow: hidden;
+    }
+    .stage-video-hint {
+      position: absolute; top: 12px; left: 14px; display: flex; align-items: center; gap: 8px; z-index: 4; pointer-events: none;
+    }
+    .stage-video-hint .dot {
+      width: 9px; height: 9px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444;
+      animation: blink 1.2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .stage-video-hint span {
+      font-size: 0.65rem; letter-spacing: 1.5px; color: rgba(255,255,255,0.45); font-weight: 600; text-transform: uppercase;
+    }
+    .stage-load-bar {
+      position: absolute; top: 32px; left: 14px; width: 100px; height: 2px; background: rgba(255,255,255,0.08); overflow: hidden; z-index: 4;
+    }
+    .stage-load-bar i {
+      display: block; height: 100%; width: 35%;
+      background: linear-gradient(90deg, transparent, rgba(245,197,24,0.8), transparent);
+      animation: slide 1.6s linear infinite;
+    }
+    @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+    #p-stage-round {
+      position: absolute; top: 12px; right: 14px; font-size: 0.65rem; color: rgba(255,255,255,0.4);
+      letter-spacing: 1px; z-index: 4; font-weight: 600;
+    }
+
+    .card-area { display: flex; align-items: center; justify-content: center; gap: 20px; min-height: 160px; padding: 20px; }
+    .playing-card {
+      width: 90px; height: 128px; background: #fff; border-radius: 8px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(0,0,0,0.5); position: relative;
+    }
+    .playing-card .rank { font-size: 2.4rem; font-weight: 800; line-height: 1; color: #0f172a; }
+    .playing-card .suit { font-size: 1.5rem; margin-top: 2px; }
+    .playing-card.red .rank, .playing-card.red .suit { color: #dc2626; }
+    .playing-card.black .rank, .playing-card.black .suit { color: #0f172a; }
+    .playing-card .card-label {
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-size: 0.7rem; font-weight: 700; color: var(--muted); letter-spacing: 1px; white-space: nowrap;
+    }
+    .card-back-face {
+      width: 90px; height: 128px; border-radius: 8px;
+      background: linear-gradient(145deg, #1e3a5f, #0f172a); border: 2px solid #334155;
+      display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .card-back-face::after { content: '♠'; font-size: 2rem; color: var(--yellow); opacity: 0.5; }
+
+    .timer-result-zone { background: #0a0f1a; padding: 14px 16px 18px; text-align: center; }
+    .timer-big { font-family: 'Orbitron', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--yellow); letter-spacing: 2px; }
+    .result-line { margin-top: 6px; font-size: 0.95rem; font-weight: 700; }
+    .result-line .win { color: var(--yellow); }
+    .result-line .pl { color: #22c55e; }
+    .result-line .pl.neg { color: #ef4444; }
+
+    .main-bets { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px 10px 6px; background: #0b1220; }
+    .main-bet {
+      border: none; border-radius: 8px; padding: 16px 8px; cursor: pointer; text-align: center;
+      transition: transform 0.1s; position: relative;
+    }
+    .main-bet:active:not(.disabled) { transform: scale(0.97); }
+    .main-bet.disabled { opacity: 0.55; pointer-events: none; }
+    .main-bet .odds { font-size: 0.78rem; font-weight: 600; opacity: 0.9; }
+    .main-bet .name { font-size: 1.05rem; font-weight: 800; margin-top: 2px; letter-spacing: 0.5px; }
+    .main-bet .amt { font-size: 0.8rem; margin-top: 4px; opacity: 0.85; }
+    .main-bet.down { background: var(--blue-btn); color: #fff; }
+    .main-bet.exact { background: var(--gray-btn); color: #fff; }
+    .main-bet.up { background: var(--green-btn); color: #fff; }
+    .main-bet.selected { outline: 3px solid var(--yellow); outline-offset: -3px; }
+
+    .chip-bar { display: flex; justify-content: center; gap: 8px; padding: 8px 10px 4px; background: #0b1220; flex-wrap: wrap; }
+    .chip {
+      width: 44px; height: 44px; border-radius: 50%; border: 2px solid; display: flex; align-items: center;
+      justify-content: center; font-size: 0.7rem; font-weight: 800; cursor: pointer; user-select: none;
+    }
+    .chip.active { transform: scale(1.12); box-shadow: 0 0 0 2px #fff; }
+    .c10 { background: #334155; border-color: #64748b; color: #e2e8f0; }
+    .c50 { background: #7c3aed; border-color: #a78bfa; color: #fff; }
+    .c100 { background: #2563eb; border-color: #60a5fa; color: #fff; }
+    .c500 { background: #dc2626; border-color: #f87171; color: #fff; }
+    .c1k { background: var(--yellow); border-color: #fde047; color: #0b1220; }
+    .c2k { background: #0d9488; border-color: #2dd4bf; color: #fff; }
+    .c5k { background: linear-gradient(135deg,#b45309,#f59e0b); border-color: #fbbf24; color: #fff; }
+
+    .last-result-bar {
+      background: #0a0f1a; padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+      border-top: 1px solid #1e293b; overflow-x: auto;
+    }
+    .last-result-bar .label { font-size: 0.7rem; font-weight: 700; color: var(--muted); letter-spacing: 1px; white-space: nowrap; }
+    .lr-dots { display: flex; gap: 6px; }
+    .lr-dot {
+      width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .lr-dot.up { background: #16a34a; }
+    .lr-dot.down { background: #2563eb; }
+    .lr-dot.exact { background: #7c3aed; }
+
+    .history-panel {
+      background: var(--panel2); margin: 10px; border-radius: 10px; border: 1px solid #1e293b; overflow: hidden;
+    }
+    .history-panel .hp-head {
+      padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; flex-wrap: wrap; gap: 6px;
+    }
+    .history-panel .hp-head h3 { font-size: 0.95rem; color: var(--yellow); font-weight: 700; }
+    .history-panel .hp-meta { font-size: 0.78rem; color: var(--muted); }
+    .history-panel .hp-meta .net { color: #22c55e; font-weight: 700; }
+    .hist-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .hist-table th {
+      text-align: left; padding: 8px 10px; background: #0f172a; color: var(--muted); font-weight: 600; font-size: 0.7rem;
+    }
+    .hist-table td { padding: 8px 10px; border-top: 1px solid #1e293b; color: var(--text); }
+    .hist-table .pl-pos { color: #22c55e; }
+    .hist-table .pl-neg { color: #ef4444; }
+    .hist-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+
+    #admin-app { display: none; min-height: 100vh; background: #0b1220; }
+    .admin-wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+    .admin-card {
+      background: var(--panel); border: 2px solid var(--yellow-dark); border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    .admin-card h2 { text-align: center; color: var(--yellow); font-size: 1.15rem; font-weight: 800; margin-bottom: 18px; letter-spacing: 1px; }
+    .admin-card h3 { color: var(--yellow); font-size: 0.95rem; margin-bottom: 14px; font-weight: 700; }
+    .user-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .user-form input {
+      padding: 10px 12px; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: var(--text); font-size: 0.88rem;
+    }
+    .user-form input[type="text"], .user-form input[type="password"] { width: 120px; }
+    .user-form input[type="number"] { width: 100px; }
+    .btn { border: none; border-radius: 6px; padding: 10px 14px; font-weight: 700; font-size: 0.82rem; cursor: pointer; color: #fff; }
+    .btn-green { background: #16a34a; }
+    .btn-red { background: #dc2626; }
+    .btn-blue { background: #2563eb; }
+    .btn-yellow { background: var(--yellow); color: #0b1220; }
+    .btn-gray { background: #475569; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .user-list { margin-top: 8px; }
+    .user-row {
+      display: flex; justify-content: space-between; align-items: center; padding: 12px 0;
+      border-bottom: 1px solid #1e293b; gap: 10px; flex-wrap: wrap;
+    }
+    .user-row:last-child { border-bottom: none; }
+    .user-info .uname { font-weight: 700; font-size: 0.95rem; }
+    .user-info .ucoins { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .user-actions { display: flex; gap: 6px; }
+    .round-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .round-controls .btn { flex: 1; min-width: 120px; padding: 14px; font-size: 0.9rem; }
+    .force-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+    .force-row select, .force-row input {
+      padding: 8px 10px; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: var(--text);
+    }
+    .live-bets-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 10px; }
+    .live-bets-table th { text-align: left; padding: 8px; color: var(--yellow); border-bottom: 1px solid #334155; font-size: 0.72rem; }
+    .live-bets-table td { padding: 8px; border-bottom: 1px solid #1e293b; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: #1e293b; border: 1px solid #334155; color: #fff; padding: 12px 22px; border-radius: 10px;
+      font-weight: 600; font-size: 0.88rem; z-index: 9999; opacity: 0; transition: all 0.3s; max-width: 90%; text-align: center;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    html { -webkit-text-size-adjust: 100%; }
+    @media (max-width: 480px) {
+      .brand-bar { padding: 6px 10px; font-size: 0.8rem; }
+      .coins-bar { padding: 8px 10px; font-size: 0.82rem; }
+      .coins-bar .btn-bets { padding: 5px 12px; font-size: 0.72rem; }
+      .game-bar { padding: 6px 10px; font-size: 0.75rem; }
+      .game-bar .round-id { font-size: 0.68rem; width: 100%; text-align: right; }
+      .stage { min-height: 200px; }
+      .card-area { min-height: 130px; padding: 12px; }
+      .playing-card, .card-back-face { width: 64px; height: 92px; }
+      .playing-card .rank { font-size: 1.7rem; }
+      .playing-card .suit { font-size: 1.2rem; }
+      .timer-big { font-size: 1.4rem; }
+      .result-line { font-size: 0.82rem; }
+      .main-bets { gap: 4px; padding: 8px 6px 4px; }
+      .main-bet { padding: 12px 4px; }
+      .main-bet .name { font-size: 0.85rem; }
+      .chip { width: 38px; height: 38px; font-size: 0.65rem; }
+      .lr-dot { width: 24px; height: 24px; font-size: 0.6rem; }
+      .history-panel { margin: 8px 6px; }
+      .hist-table { font-size: 0.7rem; }
+      .hist-table th, .hist-table td { padding: 6px; }
+      .admin-wrap { padding: 10px; }
+      .admin-card { padding: 14px; }
+      .round-controls .btn { min-width: 100%; }
+      .user-form input[type="text"], .user-form input[type="password"] { width: 100px; }
+    }
+  </style>
+<style id="libra24-bw-theme">
+:root{--yellow:#fff!important;--yellow-dark:#bbb!important;--green-btn:#111!important;--blue-btn:#222!important;--gray-btn:#333!important;--panel:#101010!important;--muted:#a7a7a7!important}
+html,body{background:#050505!important;color:#f5f5f5!important;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%,rgba(255,255,255,.055),transparent 45%);z-index:-1}
+.brand-bar,.game-bar{background:#080808!important;border-color:#2b2b2b!important}
+.coins-bar{background:#f5f5f5!important;color:#050505!important}
+.card,.panel,.history-panel,.admin-card,.game-card,.table-wrap{background:#101010!important;border-color:#303030!important;box-shadow:0 12px 35px rgba(0,0,0,.35)!important}
+button,.btn,.main-bet,.card-bet,.chip,.chip-btn{background:#171717!important;color:#fff!important;border:1px solid #444!important}
+button:hover,.btn:hover,.main-bet:hover,.card-bet:hover,.chip:hover,.chip-btn:hover{background:#292929!important;border-color:#777!important}
+.selected,.active{outline-color:#fff!important;border-color:#fff!important}
+input,select{background:#0b0b0b!important;color:#fff!important;border-color:#3b3b3b!important}
+table th{color:#fff!important;border-color:#444!important} table td{border-color:#282828!important}
+.win{color:#fff!important}.loss{color:#aaa!important}
+#admin-app,.admin-app,.admin-panel,.admin-wrap{display:none!important}
+</style>
+
+
+<style>
+:root{--bg:#050505!important;--panel:#101010!important;--panel2:#0b0b0b!important;--yellow:#fff!important;--yellow-dark:#d9d9d9!important;--blue-btn:#fff!important;--green-btn:#fff!important;--red:#fff!important;--text:#f5f5f5!important;--muted:#9a9a9a!important}
+body{background:#050505!important;color:#f5f5f5!important}.brand-bar,.game-bar,.last-result-bar{background:#0a0a0a!important;border-color:#292929!important}.coins-bar{background:#fff!important;color:#000!important}.btn-bets,.main-bet,.btn-green,.btn-blue,.btn-yellow,.btn-gray{background:#fff!important;color:#000!important;border-color:#fff!important}.main-bet.disabled{opacity:.35}.card,.panel,.history-panel,.game-card,.table-wrap{background:#101010!important;border-color:#303030!important;box-shadow:0 12px 35px rgba(0,0,0,.35)!important}.game-name,.game-title,h1,h2,h3{color:#fff!important}.win,.positive,.pl-pos{color:#fff!important}.loss,.negative,.pl-neg{color:#aaa!important}.login-screen,.login-box,.admin-app,.admin-card{display:none!important}
+</style>
+</head>
+<body>
+
+  
+
+  <div id="player-app" class="hidden">
+    <div class="brand-bar">
+      <span class="brand">LIBRA 24</span>
+      <div class="right">
+        <span class="user-tag" id="player-username">player</span>
+        <button class="btn-logout" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
+    <div class="coins-bar">
+      <span>COINS: <span id="p-coins">0</span></span>
+      <span>EXPO: <span id="p-expo">0</span></span>
+      <button class="btn-bets" onclick="document.getElementById('history-panel').scrollIntoView({behavior:'smooth'})">Bets</button>
+    </div>
+    <div class="game-bar">
+      <span class="game-name">LUCKY 7</span>
+      <span class="round-id" id="p-round-id">ROUND ID: —</span>
+    </div>
+    <div class="stage">
+      <div class="stage-video-hint"><div class="dot"></div><span>LIVE · VIDEO LOADING</span></div>
+      <div class="stage-load-bar"><i></i></div>
+      <div id="p-stage-round"></div>
+      <div class="card-area" id="p-card-area"><div class="card-back-face"></div></div>
+    </div>
+    <div class="timer-result-zone">
+      <div class="timer-big" id="p-timer">—</div>
+      <div class="result-line" id="p-result-line"></div>
+    </div>
+    <div class="chip-bar">
+      <div class="chip c10 active" data-v="10" onclick="selChip(this)">10</div>
+      <div class="chip c50" data-v="50" onclick="selChip(this)">50</div>
+      <div class="chip c100" data-v="100" onclick="selChip(this)">100</div>
+      <div class="chip c500" data-v="500" onclick="selChip(this)">500</div>
+      <div class="chip c1k" data-v="1000" onclick="selChip(this)">1K</div>
+      <div class="chip c2k" data-v="2000" onclick="selChip(this)">2K</div>
+      <div class="chip c5k" data-v="5000" onclick="selChip(this)">5K</div>
+    </div>
+    <div class="main-bets">
+      <button class="main-bet down" id="bet-down" onclick="placeBet('down')">
+        <div class="odds">0.95</div><div class="name">7 Down</div><div class="amt" id="amt-down">0</div>
+      </button>
+      <button class="main-bet exact" id="bet-exact" onclick="placeBet('exact')">
+        <div class="odds">11</div><div class="name">Exact 7</div><div class="amt" id="amt-exact">0</div>
+      </button>
+      <button class="main-bet up" id="bet-up" onclick="placeBet('up')">
+        <div class="odds">0.95</div><div class="name">7 Up</div><div class="amt" id="amt-up">0</div>
+      </button>
+    </div>
+    <div class="last-result-bar">
+      <span class="label">LAST RESULT</span>
+      <div class="lr-dots" id="p-last-dots"></div>
+    </div>
+    <div class="history-panel" id="history-panel">
+      <div class="hp-head">
+        <h3>📋 History &amp; Statement</h3>
+        <div class="hp-meta">Rounds: <span id="p-rounds">0</span> &nbsp; Net: <span class="net" id="p-net">+0</span></div>
+      </div>
+      <div id="p-hist-body"><div class="hist-empty">No rounds yet</div></div>
+    </div>
+  </div>
+
+  
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyA3CoNXjSDWo_mTz8yvLEFW4povUREWSqc",
+  authDomain: "lucky-7-casino.firebaseapp.com",
+  databaseURL: "https://lucky-7-casino-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "lucky-7-casino",
+  storageBucket: "lucky-7-casino.firebasestorage.app",
+  messagingSenderId: "872674758699",
+  appId: "1:872674758699:web:1d9b74a4abc5588f4d1a6e"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const BET_WINDOW = 10, LOCK_AT = 4, AUTO_DECIDE_AFTER = 5;
+let session = { role: null, username: null };
+let chip = 10;
+let myBets = { down: 0, exact: 0, up: 0 };
+let myExpo = 0;
+let lastRoundId = null;
+let lastResultId = null;
+let engineTimer = null, autoDecideTimer = null, nextRoundTimer = null;
+let roundCache = null, historyCache = [], settingsCache = { autoRounds: true, autoGap: 4 };
+let usersCache = {};
+let localHist = [];
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._id); t._id = setTimeout(() => t.classList.remove('show'), 2500);
+}
+function resultLabel(r) { return r === 'up' ? '7 UP' : r === 'down' ? '7 DOWN' : 'EXACT 7'; }
+
+function genCard(result) {
+  const suits = [{ s: '♠', c: 'black' }, { s: '♥', c: 'red' }, { s: '♦', c: 'red' }, { s: '♣', c: 'black' }];
+  const suit = suits[Math.floor(Math.random() * 4)];
+  let rank;
+  if (result === 'exact') rank = 7;
+  else if (result === 'up') rank = [8, 9, 10, 11, 12, 13][Math.floor(Math.random() * 6)];
+  else rank = [1, 2, 3, 4, 5, 6][Math.floor(Math.random() * 6)];
+  const display = rank === 1 ? 'A' : rank === 11 ? 'J' : rank === 12 ? 'Q' : rank === 13 ? 'K' : String(rank);
+  return { rank, display, suit: suit.s, color: suit.c };
+}
+
+// ---------- INIT ADMIN + LISTENERS ----------
+
+
+function startListeners() {
+  db.ref('round').on('value', snap => {
+    roundCache = snap.val() || { phase: 'idle', timer: 0, bets: {} };
+    onRoundUpdate();
+  });
+  db.ref('history').limitToLast(20).on('value', snap => {
+    const v = snap.val() || {};
+    historyCache = Object.keys(v).map(k => ({ key: k, ...v[k] })).sort((a, b) => (b.time || 0) - (a.time || 0));
+    renderLastDots('p-last-dots', historyCache.slice(0, 8));
+    renderLastDots('a-last-dots', historyCache.slice(0, 8));
+    if (session.role === 'player') renderPlayerHistory();
+  });
+  db.ref('settings').on('value', snap => {
+    settingsCache = snap.val() || { autoRounds: true, autoGap: 4 };
+    const ar = document.getElementById('auto-rounds');
+    const ag = document.getElementById('auto-gap');
+    if (ar) ar.value = settingsCache.autoRounds ? '1' : '0';
+    if (ag) ag.value = settingsCache.autoGap || 4;
+    ensureAutoEngine();
+  });
+  db.ref('users').on('value', snap => {
+    usersCache = snap.val() || {};
+    if (session.role === 'player' && session.username && usersCache[session.username]) {
+      document.getElementById('p-coins').textContent = Number(usersCache[session.username].coins).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+  });
+}
+
+document.getElementById('login-status').textContent = 'Connecting…';
+initGameState().then(() => { startListeners(); tryTokenAccess(); }).catch(e => { console.error(e); tryTokenAccess(); });
+
+// ---------- AUTH ----------
+
+function getQuery(){
+  const q={};
+  (location.search||'').slice(1).split('&').forEach(part=>{
+    if(!part) return;
+    const i=part.indexOf('=');
+    const k=decodeURIComponent(i<0?part:part.slice(0,i));
+    const v=decodeURIComponent(i<0?'':part.slice(i+1));
+    if(k) q[k]=v;
+  });
+  return q;
+}
+async function enterPlayer(u, libraCoins){
+  session.role='player';
+  session.username=u;
+  const snap=await db.ref('users/'+u).once('value');
+  let coins=0;
+  if(libraCoins!==undefined && libraCoins!==null && !isNaN(Number(libraCoins))){
+    coins=Math.max(0, Math.floor(Number(libraCoins)));
+  } else if(snap.exists()){
+    coins=Number(snap.val().coins)||0;
+  }
+  await db.ref('users/'+u).set({ pass:'token', coins:coins, isAdmin:false, fromLibra:true });
+  
+  
+  document.getElementById('player-app').classList.remove('hidden');
+  const el=document.getElementById('player-username');
+  if(el) el.textContent=u;
+  const pc=document.getElementById('p-coins')||document.getElementById('player-coins');
+  if(pc) pc.textContent=Number(coins).toLocaleString();
+  myBets={ down:0, exact:0, up:0 }; myExpo=0;
+  try{ localHist=JSON.parse(localStorage.getItem('l7hist_'+u)||'[]'); }catch(e){ localHist=[]; }
+  lastRoundId=null; lastResultId=null;
+  onRoundUpdate();
+  renderPlayerHistory();
+}
+async function doLogin(){}
+function doLogout(){
+  try{ stopEngine(); }catch(e){}
+  session={ role:null, username:null };
+  
+  document.getElementById('player-app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  const st=document.getElementById('login-status');
+  if(st) st.innerHTML='Open from <b style="color:#f5c518">Libra 24</b>';
+}
+const LIBRA_API=(function(){try{const q=new URLSearchParams(location.search);return q.get('api')||'https://libra24.onrender.com'}catch(e){return 'https://libra24.onrender.com'}})();
+let libraToken=null; let lastLibraSyncId=null;
+function libraWallet(delta, reason){
+  if(!session.username||!libraToken) return Promise.resolve();
+  return fetch('https://libra24.onrender.com/api/wallet/adjust',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:session.username,token:libraToken,delta:Number(delta)||0,reason:reason||'',game:'Lucky 7'})
+  }).then(r=>r.json()).then(j=>{ console.log('Libra', j); return j; }).catch(e=>null);
+}
+
+
+
+// ---------- ADMIN USERS ----------
+
+
+
+
+
+
+
+
+
+
+// ---------- ROUND ENGINE (admin drives) ----------
+function stopEngine() {
+  if (engineTimer) { clearInterval(engineTimer); engineTimer = null; }
+  if (autoDecideTimer) { clearTimeout(autoDecideTimer); autoDecideTimer = null; }
+  if (nextRoundTimer) { clearTimeout(nextRoundTimer); nextRoundTimer = null; }
+}
+
+async function autoStartRound() {
+  const r = roundCache || {};
+  if (r.phase === 'betting' || r.phase === 'locked' || r.phase === 'waiting') {
+    toast('Round already running'); return;
+  }
+  stopEngine();
+  const rid = Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 999);
+  await db.ref('round').set({
+    id: rid, phase: 'betting', timer: BET_WINDOW,
+    result: null, card: null, decided: false, pendingResult: null, bets: {}
+  });
+  startEngineTick();
+  toast('Round started');
+}
+
+function startEngineTick() {
+  if (engineTimer) clearInterval(engineTimer);
+  engineTimer = setInterval(async () => {
+    
+    const snap = await db.ref('round').once('value');
+    const r = snap.val();
+    if (!r || (r.phase !== 'betting' && r.phase !== 'locked')) {
+      clearInterval(engineTimer); engineTimer = null; return;
+    }
+    let timer = Math.max(0, (r.timer || 0) - 1);
+    let phase = r.phase;
+    if (timer === LOCK_AT && phase === 'betting') phase = 'locked';
+    if (timer <= 0 && !r.decided) {
+      phase = 'waiting'; timer = 0;
+      await db.ref('round').update({ timer, phase });
+      clearInterval(engineTimer); engineTimer = null;
+      // INSTANT reveal at 10s end — pending or auto
+      const final = r.pendingResult || smartAuto(r);
+      applyDecision(final, !r.pendingResult);
+      return;
+    }
+    await db.ref('round').update({ timer, phase });
+  }, 1000);
+}
+
+let masterForcedWinner = null;
+function smartAuto(r) {
+  if(masterForcedWinner==='up' || masterForcedWinner==='down' || masterForcedWinner==='exact'){
+    const w = masterForcedWinner; masterForcedWinner = null; return w;
+  }
+  const bets = r.bets || {};
+  let up = 0, down = 0, exact = 0;
+  Object.values(bets).forEach(b => { up += b.up || 0; down += b.down || 0; exact += b.exact || 0; });
+  const total = up + down + exact;
+  if (total === 0) {
+    const x = Math.random();
+    if (x < 0.08) return 'exact';
+    return x < 0.54 ? 'up' : 'down';
+  }
+  const arr = [{ k: 'up', v: up }, { k: 'down', v: down }, { k: 'exact', v: exact }].sort((a, b) => a.v - b.v);
+  if (Math.random() < 0.2) {
+    const x = Math.random();
+    if (x < 0.08) return 'exact';
+    return x < 0.54 ? 'up' : 'down';
+  }
+  return arr[0].k;
+}
+
+
+
+async function applyDecision(result, isAuto) {
+  stopEngine();
+  const snap = await db.ref('round').once('value');
+  const r = snap.val();
+  if (!r || r.decided) return;
+  const card = genCard(result);
+  const bets = r.bets || {};
+  const payouts = { up: 1.95, down: 1.95, exact: 12 };
+
+  // settle coins
+  const updates = {};
+  updates['round/result'] = result;
+  updates['round/card'] = card;
+  updates['round/decided'] = true;
+  updates['round/phase'] = 'result';
+  updates['round/timer'] = 0;
+  updates['round/pendingResult'] = null;
+
+  for (const uname of Object.keys(bets)) {
+    const b = bets[uname];
+    if (b[result] > 0) {
+      const win = Math.floor(b[result] * payouts[result]);
+      const userSnap = await db.ref('users/' + uname + '/coins').once('value');
+      updates['users/' + uname + '/coins'] = (userSnap.val() || 0) + win;
+    }
+  }
+
+  const histKey = db.ref('history').push().key;
+  updates['history/' + histKey] = { result, card, time: Date.now(), roundId: r.id };
+
+  await db.ref().update(updates);
+  toast((isAuto ? '⚡ AUTO: ' : '') + resultLabel(result));
+
+  // auto next
+  if (settingsCache.autoRounds) {
+    const gap = (settingsCache.autoGap || 4) * 1000;
+    nextRoundTimer = setTimeout(() => {
+      nextRoundTimer = null;
+    }, gap);
+  }
+}
+
+function ensureAutoEngine() {
+  if (!settingsCache.autoRounds) return;
+  const r = roundCache || {};
+  if (r.phase === 'idle' || r.phase === 'result') {
+    if (!nextRoundTimer && !engineTimer) {
+      const gap = r.phase === 'idle' ? 1000 : (settingsCache.autoGap || 4) * 1000;
+      nextRoundTimer = setTimeout(() => {
+        nextRoundTimer = null;
+      }, gap);
+    }
+  } else if ((r.phase === 'betting' || r.phase === 'locked') && !engineTimer) {
+    startEngineTick();
+  } else if (r.phase === 'waiting' && !r.decided) {
+    const final = r.pendingResult || smartAuto(r);
+    applyDecision(final, !r.pendingResult);
+  }
+}
+
+
+
+// ---------- PLAYER BET ----------
+async function tryTokenAccess(){
+  const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
+  const q=new URLSearchParams(location.search);
+  const token=(stored&&stored.token)||q.get('token')||'';
+  const user=(stored&&stored.username)||q.get('user')||q.get('username')||'';
+  libraToken=token;
+  if(!token||!user) return;
+  try{
+    const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,token,gameId:'lucky7'})});
+    const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.message||'Access denied');
+    await enterPlayer(d.user.username,d.user.coins);
+  }catch(e){console.error(e);}
+}
+
+function selChip(el) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  chip = parseInt(el.dataset.v);
+}
+
+async function placeBet(type) {
+  if (session.role !== 'player') return;
+  const r = roundCache;
+  if (!r || r.phase !== 'betting') { toast('Betting closed'); return; }
+  const u = session.username;
+  const userSnap = await db.ref('users/' + u).once('value');
+  const user = userSnap.val();
+  if (!user || user.coins < chip) { toast('Not enough coins'); return; }
+
+  // transaction-like update
+  await db.ref('users/' + u + '/coins').set(user.coins - chip);
+  const betPath = 'round/bets/' + u;
+  const betSnap = await db.ref(betPath).once('value');
+  const cur = betSnap.val() || { down: 0, exact: 0, up: 0 };
+  cur[type] = (cur[type] || 0) + chip;
+  await db.ref(betPath).set(cur);
+
+  myBets[type] += chip;
+  myExpo += chip;
+  document.getElementById('amt-' + type).textContent = myBets[type];
+  document.getElementById('bet-' + type).classList.add('selected');
+  document.getElementById('p-expo').textContent = myExpo;
+  toast('Bet ₹' + chip + ' on ' + resultLabel(type));
+  try{
+    const so = window.__l24socket;
+    if(so) so.emit('live_bet', {
+      gameId: 'lucky7',
+      username: u,
+      side: type,
+      amount: chip,
+      roundId: (roundCache && roundCache.id) || null
+    });
+  }catch(_e){}
+}
+
+// ---------- UI UPDATE ----------
+function onRoundUpdate() {
+  const r = roundCache || { phase: 'idle', timer: 0, bets: {} };
+
+  if (session.role === 'player') {
+    // new round reset local bets
+    if (r.id && r.id !== lastRoundId) {
+      lastRoundId = r.id;
+      lastResultId = null;
+      myBets = { down: 0, exact: 0, up: 0 };
+      myExpo = 0;
+      ['down', 'exact', 'up'].forEach(k => {
+        const a = document.getElementById('amt-' + k);
+        if (a) a.textContent = '0';
+        const b = document.getElementById('bet-' + k);
+        if (b) b.classList.remove('selected');
+      });
+      // restore my bets from server if rejoined mid-round
+      if (r.bets && r.bets[session.username]) {
+        const b = r.bets[session.username];
+        myBets = { down: b.down || 0, exact: b.exact || 0, up: b.up || 0 };
+        myExpo = myBets.down + myBets.exact + myBets.up;
+        ['down', 'exact', 'up'].forEach(k => {
+          document.getElementById('amt-' + k).textContent = myBets[k];
+          if (myBets[k] > 0) document.getElementById('bet-' + k).classList.add('selected');
+        });
+        document.getElementById('p-expo').textContent = myExpo;
+      }
+    }
+
+    document.getElementById('p-round-id').textContent = 'ROUND ID: ' + (r.id || '—');
+    const sr = document.getElementById('p-stage-round');
+    if (sr) sr.textContent = r.id ? ('ID ' + r.id) : '';
+    document.getElementById('p-timer').textContent = (r.timer > 0 ? r.timer : 0) + 's';
+    document.getElementById('p-expo').textContent = myExpo;
+
+    const canBet = r.phase === 'betting';
+    document.querySelectorAll('.main-bet').forEach(b => {
+      canBet ? b.classList.remove('disabled') : b.classList.add('disabled');
+    });
+
+    const area = document.getElementById('p-card-area');
+    if (r.phase === 'result' && r.card) {
+      const c = r.card;
+      area.innerHTML = `<div class="playing-card ${c.color}"><div class="rank">${c.display}</div><div class="suit">${c.suit}</div><div class="card-label">LUCKY 7</div></div>`;
+      const won = myBets[r.result] || 0;
+      const totalBet = myBets.down + myBets.exact + myBets.up;
+      const mult = r.result === 'exact' ? 12 : 1.95;
+      const winAmt = won > 0 ? Math.floor(won * mult) : 0;
+      const pl = winAmt - totalBet;
+      document.getElementById('p-result-line').innerHTML =
+        `<span class="win">${resultLabel(r.result)} Wins!</span> | P/L: <span class="pl ${pl < 0 ? 'neg' : ''}">${pl >= 0 ? '+' : ''}${pl}</span>`;
+
+      if (lastResultId !== r.id) {
+        lastResultId = r.id;
+          if(lastLibraSyncId!==r.id){ lastLibraSyncId=r.id; const wb=(myBets&&r.result)?(myBets[r.result]||0):0; if(wb>0) libraWallet(Math.floor(wb*(r.result==='exact'?12:1.95)),'win_'+r.result); }
+        const bal = usersCache[session.username] ? usersCache[session.username].coins : 0;
+        pushLocalHist({
+          card: c.display + c.suit,
+          result: r.result,
+          resultLabel: resultLabel(r.result),
+          betStr: `D:${myBets.down} E:${myBets.exact} U:${myBets.up}`,
+          amt: totalBet, pl, bal
+        });
+        renderPlayerHistory();
+      }
+    } else {
+      area.innerHTML = '<div class="card-back-face"></div>';
+      document.getElementById('p-result-line').textContent = '';
+    }
+  }
+
+  
+}
+
+
+
+function renderLastDots(elId, hist) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!hist.length) { el.innerHTML = '<span style="color:#64748b;font-size:0.8rem">—</span>'; return; }
+  el.innerHTML = hist.map(h => {
+    const t = h.result === 'up' ? 'U' : h.result === 'down' ? 'D' : '7';
+    return `<div class="lr-dot ${h.result}">${t}</div>`;
+  }).join('');
+}
+
+function pushLocalHist(entry) {
+  try {
+    let h = JSON.parse(localStorage.getItem('l7hist_' + session.username) || '[]');
+    h.unshift(entry);
+    if (h.length > 40) h = h.slice(0, 40);
+    localStorage.setItem('l7hist_' + session.username, JSON.stringify(h));
+    localHist = h;
+  } catch (e) {}
+}
+
+function renderPlayerHistory() {
+  const body = document.getElementById('p-hist-body');
+  if (!body) return;
+  try { localHist = JSON.parse(localStorage.getItem('l7hist_' + session.username) || '[]'); } catch (e) {}
+  const rows = localHist.slice(0, 20);
+  document.getElementById('p-rounds').textContent = rows.length;
+  const net = rows.reduce((s, r) => s + (r.pl || 0), 0);
+  document.getElementById('p-net').textContent = (net >= 0 ? '+' : '') + net;
+  document.getElementById('p-net').style.color = net >= 0 ? '#22c55e' : '#ef4444';
+
+  if (!rows.length) {
+    if (!historyCache.length) { body.innerHTML = '<div class="hist-empty">No rounds yet</div>'; return; }
+    body.innerHTML = `<table class="hist-table"><thead><tr><th>#</th><th>Card</th><th>Result</th><th>Bet</th><th>Amt</th><th>P/L</th><th>Bal</th></tr></thead><tbody>` +
+      historyCache.slice(0, 8).map((h, i) => {
+        const cardStr = h.card ? h.card.display + h.card.suit : '—';
+        return `<tr><td>${i + 1}</td><td>${cardStr}</td><td>${resultLabel(h.result)}</td><td>—</td><td>0</td><td class="pl-pos">+0</td><td>—</td></tr>`;
+      }).join('') + '</tbody></table>';
+    return;
+  }
+  body.innerHTML = `<table class="hist-table"><thead><tr><th>#</th><th>Card</th><th>Result</th><th>Bet</th><th>Amt</th><th>P/L</th><th>Bal</th></tr></thead><tbody>` +
+    rows.map((r, i) => {
+      const plCls = r.pl >= 0 ? 'pl-pos' : 'pl-neg';
+      return `<tr><td>${i + 1}</td><td>${r.card || '—'}</td><td>${r.resultLabel || r.result}</td><td>${r.betStr || '—'}</td><td>${r.amt || 0}</td><td class="${plCls}">${(r.pl >= 0 ? '+' : '') + r.pl}</td><td>${r.bal != null ? r.bal : '—'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
+</script>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+window.socketioGameBoot=function(user,token){
+  try{ const so=window.__l24socket||(window.__l24socket=io()); so.emit('auth',{username:user.username,token},function(res){if(!res.success){location.href='/login';return;}});
+    so.emit('join_game_room',{gameId:'lucky7'});
+    so.on('games_updated',function(gs){ const g=gs && gs['lucky7']; if(g && !g.active) location.href='/dashboard'; });
+    so.on('master_force_result', function(d){ if(d && d.gameId==='lucky7'){ masterForcedWinner = d.winner || null; }});
+    so.on('live_game_update', function(g){ if(g && g.id==='lucky7' && g.forcedWinner){ masterForcedWinner = g.forcedWinner; }});
+  }catch(e){}
+};
+</script>
+
+<script>
+(function(){
+  const GAME_ID='lucky7';
+  async function boot(){
+    const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
+    const q=new URLSearchParams(location.search);
+    const token=(stored&&stored.token)||q.get('token')||'';
+    const username=(stored&&stored.username)||q.get('user')||q.get('username')||'';
+    if(!token||!username){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px">Open this game from your Libra 24 dashboard.</p></div></div>`; return; }
+    try{
+      const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:GAME_ID})});
+      const data=await r.json();
+      if(!r.ok||!data.success) throw new Error(data.message||'Access denied');
+      window.LIBRA_GAME_SESSION=data.user; window.LIBRA_GAME_TOKEN=token;
+      if(window.socketioGameBoot) window.socketioGameBoot(data.user,token);
+      if(window.tryTokenAccess) await window.tryTokenAccess();
+    }catch(e){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px;color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;margin-top:16px;padding:11px 18px;border:1px solid #555;background:#fff;color:#000;border-radius:10px;font-weight:700">Back to Libra 24</a></div></div>`; }
+  }
+  window.addEventListener('DOMContentLoaded',boot);
+})();
+</script>
+</body>
+</html>
 
