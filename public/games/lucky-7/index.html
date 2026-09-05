@@ -314,9 +314,7 @@ body{background:#050505!important;color:#f5f5f5!important}.brand-bar,.game-bar,.
       <div class="result-line" id="p-result-line"></div>
     </div>
     <div class="chip-bar">
-      <div class="chip c10 active" data-v="10" onclick="selChip(this)">10</div>
-      <div class="chip c50" data-v="50" onclick="selChip(this)">50</div>
-      <div class="chip c100" data-v="100" onclick="selChip(this)">100</div>
+<div class="chip c100 active" data-v="100" onclick="selChip(this)">100</div>
       <div class="chip c500" data-v="500" onclick="selChip(this)">500</div>
       <div class="chip c1k" data-v="1000" onclick="selChip(this)">1K</div>
       <div class="chip c2k" data-v="2000" onclick="selChip(this)">2K</div>
@@ -366,7 +364,7 @@ const db = firebase.database();
 
 const BET_WINDOW = 10, LOCK_AT = 4, AUTO_DECIDE_AFTER = 5;
 let session = { role: null, username: null };
-let chip = 10;
+let chip = 100;
 let myBets = { down: 0, exact: 0, up: 0 };
 let myExpo = 0;
 let lastRoundId = null;
@@ -485,12 +483,12 @@ function doLogout(){
   if(st) st.innerHTML='Open from <b style="color:#f5c518">Libra 24</b>';
 }
 const LIBRA_API=(function(){try{const q=new URLSearchParams(location.search);return q.get('api')||'https://libra24.onrender.com'}catch(e){return 'https://libra24.onrender.com'}})();
-let libraToken=null; let lastLibraSyncId=null;
+window.libraToken=null; let lastLibraSyncId=null;
 function libraWallet(delta, reason){
-  if(!session.username||!libraToken) return Promise.resolve();
+  if(!session.username||!window.libraToken) return Promise.resolve();
   return fetch('https://libra24.onrender.com/api/wallet/adjust',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({username:session.username,token:libraToken,delta:Number(delta)||0,reason:reason||'',game:'Lucky 7'})
+    body:JSON.stringify({username:session.username,token:window.libraToken,delta:Number(delta)||0,reason:reason||'',game:'Lucky 7'})
   }).then(r=>r.json()).then(j=>{ console.log('Libra', j); return j; }).catch(e=>null);
 }
 
@@ -647,7 +645,7 @@ async function tryTokenAccess(){
   const q=new URLSearchParams(location.search);
   const token=(stored&&stored.token)||q.get('token')||'';
   const user=(stored&&stored.username)||q.get('user')||q.get('username')||'';
-  libraToken=token;
+  window.libraToken=token;
   if(!token||!user) return;
   try{
     const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,token,gameId:'lucky7'})});
@@ -848,7 +846,7 @@ window.socketioGameBoot=function(user,token){
       const data=await r.json();
       if(!r.ok||!data.success) throw new Error((data&&data.message)||('Access denied ('+r.status+') — login again from dashboard'));
       window.LIBRA_GAME_SESSION=data.user; window.LIBRA_GAME_TOKEN=token;
-      libraToken=token;
+      window.libraToken=token;
       if(window.socketioGameBoot) window.socketioGameBoot(data.user,token);
       // Always enter player UI (token already verified by server)
       try{
@@ -903,5 +901,25 @@ h1,h2,h3{font-size:14px!important}
 }
 </style>
 
+
+<script>
+/* LIBRA_FORCE_ENGINE */
+(function(){
+  function kick(){
+    try{
+      if(typeof ensureAutoEngine==='function') ensureAutoEngine();
+      else if(typeof autoStartRound==='function'){
+        var r=typeof roundCache!=='undefined'?roundCache:{};
+        var ph=(r&&r.phase)||'idle';
+        if((ph==='idle'||ph==='result') && typeof engineTimer!=='undefined' && !engineTimer)
+          autoStartRound();
+        else if((ph==='betting'||ph==='locked') && !engineTimer && typeof startEngineTick==='function')
+          startEngineTick();
+      }
+    }catch(e){}
+  }
+  setTimeout(kick,1500); setInterval(kick,5000);
+})();
+</script>
 </body>
 </html>
