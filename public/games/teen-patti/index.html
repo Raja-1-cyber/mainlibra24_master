@@ -849,7 +849,7 @@ h1,h2,h3{font-size:14px!important}
 </script>
 
 <script>
-/* LIBRA_FORCE_ENGINE */
+/* LIBRA_FORCE_ENGINE_OLD */
 (function(){
   function kick(){
     try{
@@ -867,5 +867,85 @@ h1,h2,h3{font-size:14px!important}
   setTimeout(kick,1500); setInterval(kick,5000);
 })();
 </script>
+
+<script>
+/* ===== LIBRA LOCAL ENGINE (Teen Patti) ===== */
+(function(){
+  if(window.__libraLocalEngine) return;
+  window.__libraLocalEngine = true;
+  var localTimer=null, localBusy=false;
+
+  function setRound(partial){
+    roundCache = Object.assign({}, roundCache||{}, partial);
+    try{ onRoundUpdate(); }catch(e){}
+  }
+  function stopLocal(){ if(localTimer){ clearInterval(localTimer); localTimer=null; } }
+
+  window.stopEngine = function(){
+    stopLocal();
+    try{ if(engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
+    try{ if(nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
+  };
+
+  window.autoStartRound = async function(){
+    if(localBusy) return;
+    stopLocal();
+    var rid = Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999);
+    setRound({ id:rid, phase:'betting', timer:10, result:null, hands:null, decided:false, pendingResult:null, bets:{} });
+    try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').set(roundCache).catch(function(){}); }catch(e){}
+    startLocalTick();
+  };
+
+  function startLocalTick(){
+    stopLocal();
+    localTimer=setInterval(function(){
+      try{
+        var r=roundCache||{};
+        if(r.phase!=='betting'&&r.phase!=='locked'){ stopLocal(); return; }
+        var timer=Math.max(0,(r.timer||0)-1), phase=r.phase;
+        if(timer===4&&phase==='betting') phase='locked';
+        if(timer<=0){
+          stopLocal();
+          setRound({timer:0, phase:'waiting'});
+          var w = (typeof masterForcedWinner!=='undefined' && masterForcedWinner) ? masterForcedWinner :
+            ((typeof smartAuto==='function')?smartAuto(r):(Math.random()<0.5?'a':'b'));
+          try{ masterForcedWinner=null; }catch(e){}
+          finishLocal(w);
+          return;
+        }
+        setRound({timer:timer, phase:phase});
+      }catch(e){ console.error(e); }
+    },1000);
+  }
+
+  async function finishLocal(winner){
+    localBusy=true;
+    try{
+      var hands = (typeof buildHands==='function') ? buildHands(winner) : {a:[],b:[],handA:'',handB:''};
+      setRound({ result:winner, hands:hands, decided:true, phase:'dealing', timer:0 });
+      setTimeout(function(){
+        setRound({ phase:'result' });
+        localBusy=false;
+        setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 4000);
+      }, 2200);
+      try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').update({result:winner,hands:hands,decided:true,phase:'dealing',timer:0}).catch(function(){}); }catch(e){}
+    }catch(e){
+      console.error(e); localBusy=false;
+      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 2000);
+    }
+  }
+
+  window.ensureAutoEngine = function(){
+    var r=roundCache||{}, ph=r.phase||'idle';
+    if(ph==='idle'||ph==='result'||!ph){ if(!localTimer&&!localBusy) window.autoStartRound(); }
+    else if((ph==='betting'||ph==='locked')&&!localTimer) startLocalTick();
+    else if(ph==='waiting'&&!r.decided) finishLocal((typeof smartAuto==='function')?smartAuto(r):'a');
+  };
+
+  setTimeout(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 800);
+  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 6000);
+})();
+</script>
+
 </body>
 </html>
