@@ -506,7 +506,9 @@ function smartAuto(r){
 }
 
 async function applyDecision(result,isAuto){
+  /* LIBRA_APPLY_GUARD */
   stopEngine();
+  try{
   const r=(await fdb.ref(ROOT+'/round').once('value')).val();
   if(!r||r.decided)return;
   const hands=buildHands(result);
@@ -531,11 +533,20 @@ async function applyDecision(result,isAuto){
   await fdb.ref().update(updates);
   // 6 card flips ~ 6*320ms
   setTimeout(async()=>{
-    await fdb.ref(ROOT+'/round/phase').set('result');
-    if(settingsCache.autoRounds){
-      nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},(settingsCache.autoGap||4)*1000);
-    }
+    try{
+      await fdb.ref(ROOT+'/round/phase').set('result');
+      if(settingsCache.autoRounds){
+        nextRoundTimer=setTimeout(()=>{nextRoundTimer=null;autoStartRound()},(settingsCache.autoGap||4)*1000);
+      }
+    }catch(e){ console.error(e); try{autoStartRound()}catch(_e){} }
   }, 2200);
+  }catch(e){
+    console.error("applyDecision failed",e);
+    try{
+      fdb.ref(ROOT+"/round").update({phase:"result",decided:true,timer:0});
+      setTimeout(function(){try{autoStartRound()}catch(_e){}},2000);
+    }catch(_e){}
+  }
 }
 function ensureAutoEngine(){
   if(!settingsCache.autoRounds)return;
@@ -654,11 +665,17 @@ function onRoundUpdate(){
         document.getElementById('p-hand-a').textContent='';
         document.getElementById('p-hand-b').textContent='';
       }else{
-        const h=r.hands;
-        document.getElementById('p-cards-a').innerHTML=h.a.map(c=>cardHTML(c)).join('');
-        document.getElementById('p-cards-b').innerHTML=h.b.map(c=>cardHTML(c)).join('');
-        document.getElementById('p-hand-a').textContent=h.handA||'';
-        document.getElementById('p-hand-b').textContent=h.handB||'';
+        const h=r.hands||{a:[],b:[]};
+        const ha=Array.isArray(h.a)?h.a:[];
+        const hb=Array.isArray(h.b)?h.b:[];
+        const elA=document.getElementById('p-cards-a');
+        const elB=document.getElementById('p-cards-b');
+        if(elA) elA.innerHTML=ha.map(c=>cardHTML(c)).join('');
+        if(elB) elB.innerHTML=hb.map(c=>cardHTML(c)).join('');
+        const haEl=document.getElementById('p-hand-a');
+        const hbEl=document.getElementById('p-hand-b');
+        if(haEl) haEl.textContent=h.handA||'';
+        if(hbEl) hbEl.textContent=h.handB||'';
         const won=myBets[r.result]||0;
         const total=myBets.a+myBets.b;
         const winAmt=won>0?Math.floor(won*1.95):0;
@@ -784,5 +801,53 @@ h1,h2,h3{font-size:14px!important}
 }
 </style>
 
+<script>
+/* ===== LIBRA STABILITY FIX: watchdog + null-safe ===== */
+(function(){
+  var stuckSince = 0;
+  var lastPhase = '';
+  setInterval(function(){
+    try{
+      var r = (typeof roundCache!=='undefined' && roundCache) ? roundCache : null;
+      if(!r) return;
+      var ph = r.phase || 'idle';
+      if(ph !== lastPhase){ lastPhase = ph; stuckSince = Date.now(); }
+      var stuckMs = Date.now() - stuckSince;
+      // stuck in waiting/dealing too long → force recover
+      if((ph==='waiting' || ph==='dealing') && stuckMs > 18000){
+        console.warn('[libra] stuck phase', ph, 'recovering');
+        stuckSince = Date.now();
+        try{
+          if(typeof stopEngine==='function') stopEngine();
+          if(typeof fdb!=='undefined' && typeof ROOT!=='undefined'){
+            fdb.ref(ROOT+'/round').update({
+              phase: 'result',
+              decided: true,
+              timer: 0
+            }).catch(function(){});
+          }
+          setTimeout(function(){
+            try{ if(typeof autoStartRound==='function') autoStartRound(); }catch(e){}
+          }, 1500);
+        }catch(e){ console.error(e); }
+      }
+      // idle too long with auto on → start
+      if((ph==='idle' || ph==='result') && stuckMs > 8000){
+        try{
+          if(typeof settingsCache!=='undefined' && settingsCache.autoRounds!==false){
+            if(typeof engineTimer!=='undefined' && !engineTimer && typeof nextRoundTimer!=='undefined' && !nextRoundTimer){
+              if(typeof autoStartRound==='function') autoStartRound();
+            }
+          }
+        }catch(e){}
+      }
+      // betting/locked without engine → restart engine
+      if((ph==='betting'||ph==='locked') && typeof engineTimer!=='undefined' && !engineTimer){
+        try{ if(typeof startEngineTick==='function') startEngineTick(); }catch(e){}
+      }
+    }catch(e){ console.error('[libra watchdog]', e); }
+  }, 3000);
+})();
+</script>
 </body>
 </html>
