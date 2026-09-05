@@ -1,1 +1,702 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20-20 Dragon Tiger - LIBRA 24</title>
+  
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #0a0a0a;
+      color: white;
+      min-height: 100vh;
+    }
+    .top-bar {
+      background: #111;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #333;
+    }
+    .logo { font-weight: bold; color: #fbbf24; }
+    .user-info { font-size: 13px; display: flex; align-items: center; gap: 10px; }
+    .logout-btn {
+      background: #ef4444; color: white; border: none;
+      padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+    .balance-bar {
+      background: linear-gradient(90deg, #facc15, #eab308);
+      padding: 10px;
+      display: flex;
+      justify-content: space-around;
+      font-weight: bold;
+      font-size: 15px;
+      color: #000;
+    }
+    .coins { color: #166534; }
+    .expo { color: #dc2626; }
+    .game-header {
+      background: #1a1a1a;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      border-bottom: 1px solid #333;
+    }
+    .cards-area {
+      background: #000;
+      height: 220px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .cards-container {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      gap: 40px;
+      align-items: center;
+    }
+    .card-back, .card-front {
+      width: 70px;
+      height: 100px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: white;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    }
+    .card-back {
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      border: 2px solid #60a5fa;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px);
+    }
+    .card-front {
+      background: white;
+      color: black;
+      font-size: 22px;
+      font-weight: bold;
+      flex-direction: column;
+      line-height: 1.15;
+      padding: 4px;
+      text-align: center;
+    }
+    .card-front .suit-red { color: #dc2626; }
+    .card-front .suit-black { color: #111; }
+    .card-front .rank-line { font-size: 18px; }
+    .card-front .suit-line { font-size: 24px; }
+    .card-label {
+      text-align: center;
+      font-size: 11px;
+      margin-top: 4px;
+      color: #ccc;
+      z-index: 5;
+    }
+    .spinner {
+      position: absolute;
+      width: 40px; height: 40px;
+      border: 4px solid #333;
+      border-top: 4px solid #fbbf24;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      z-index: 10;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .timer-box {
+      text-align: center;
+      padding: 8px;
+      background: #111;
+      font-size: 28px;
+      font-weight: bold;
+      color: #fbbf24;
+    }
+    .bet-section { background: #1e293b; padding: 12px; }
+    .main-bets { display: flex; gap: 8px; margin-bottom: 15px; }
+    .main-bet-btn {
+      flex: 1; padding: 14px 8px; border: none; border-radius: 8px;
+      font-weight: bold; font-size: 15px; cursor: pointer; color: white;
+    }
+    .dragon-btn { background: #1e40af; }
+    .tie-btn { background: #374151; }
+    .tiger-btn { background: #166534; }
+    .odds { font-size: 12px; opacity: 0.9; display: block; margin-bottom: 4px; }
+    .specific-bets {
+      background: #0f172a; padding: 10px; border-radius: 8px; margin-top: 10px;
+    }
+    .specific-title {
+      text-align: center; font-size: 13px; color: #94a3b8; margin-bottom: 8px;
+    }
+    .card-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+    }
+    .card-bet {
+      background: white; color: black; border-radius: 6px;
+      padding: 6px 2px; text-align: center; font-size: 14px;
+      font-weight: bold; cursor: pointer; border: 2px solid transparent;
+    }
+    .card-bet.selected { border-color: #fbbf24; background: #fef3c7; }
+    .card-bet small { display: block; font-size: 10px; color: #666; }
+    .last-result {
+      background: #111; padding: 10px;
+      display: flex; align-items: center; gap: 8px; overflow-x: auto;
+    }
+    .last-result-title { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+    .result-circle {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: bold; flex-shrink: 0;
+    }
+    .d-circle { background: #7c3aed; }
+    .t-circle { background: #dc2626; }
+    .history-section {
+      margin: 15px; background: #1e293b; border-radius: 12px;
+      padding: 12px; overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px 6px; border-bottom: 1px solid #334155; text-align: center; }
+    th { background: #0f172a; color: #94a3b8; }
+    .win { color: #22c55e; font-weight: bold; }
+    .loss { color: #ef4444; font-weight: bold; }
+    .status {
+      text-align: center; padding: 8px; font-size: 14px; background: #111;
+    }
+  
+    .chip-bar{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 0 4px}
+    .chip-btn{min-width:56px;padding:10px 12px;border-radius:999px;border:2px solid #475569;background:#0f172a;color:#e2e8f0;font-weight:800;font-size:13px;cursor:pointer}
+    .chip-btn.active{border-color:#fbbf24;background:#422006;color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.25)}
+    .ctrl-bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:8px 10px 0}
+    .ctrl-btn{padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:13px}
+    .ctrl-start{background:linear-gradient(90deg,#facc15,#eab308);color:#000}
+    .ctrl-auto{background:#1e293b;color:#e2e8f0;border:1px solid #334155}
+
+  </style>
+<style>
+body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,.history-section,.last-result{background:#0a0a0a!important;border-color:#292929!important}.balance-bar{background:#fff!important;color:#000!important}.logo{color:#fff!important}.coins{color:#000!important}.expo{color:#555!important}.card-bet,.chip-btn,.bet-btn{background:#111!important;color:#fff!important;border:1px solid #444!important}.card-bet.active,.chip-btn.active,.bet-btn:hover{background:#fff!important;color:#000!important}.card-front,.card-back{filter:grayscale(1)}table th{background:#111!important;color:#fff!important}h3{color:#fff!important}.win{color:#fff!important}.loss{color:#aaa!important}</style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="logo">LIBRA 24</div>
+    <div class="user-info">
+      <span id="playerName">Player</span>
+      <button class="logout-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Balance -->
+  <div class="balance-bar">
+    <div>COINS: <span class="coins" id="coins">0</span></div>
+    <div>EXPO: <span class="expo" id="expo">0</span></div>
+    <div style="background:#22c55e;color:white;padding:2px 12px;border-radius:4px;">Bets</div>
+  </div>
+
+  <!-- Game Header -->
+  <div class="game-header">
+    <div>20-20 DRAGON TIGER</div>
+    <div>ROUND ID: <span id="roundId">2E121...</span></div>
+  </div>
+
+  <!-- Cards Area -->
+  <div class="cards-area" id="cardsArea">
+    <div class="spinner" id="spinner"></div>
+    <div class="cards-container" id="cardsContainer">
+      <div>
+        <div class="card-back" id="dragonCard">DR</div>
+        <div class="card-label">DRAGON</div>
+      </div>
+      <div>
+        <div class="card-back" id="tigerCard">TG</div>
+        <div class="card-label">TIGER</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timer -->
+  <div class="timer-box">
+    <span id="timer">20</span>s
+  </div>
+  <div class="status" id="status">Betting Time</div>
+
+  <!-- Main Bets -->
+  <div class="bet-section">
+
+    <div class="chip-bar">
+      <button type="button" class="chip-btn active" data-v="100" onclick="selChip(this)">100</button>
+      <button type="button" class="chip-btn" data-v="500" onclick="selChip(this)">500</button>
+      <button type="button" class="chip-btn" data-v="1000" onclick="selChip(this)">1K</button>
+      <button type="button" class="chip-btn" data-v="5000" onclick="selChip(this)">5K</button>
+    </div>
+
+    <div class="main-bets">
+      <button class="main-bet-btn dragon-btn" onclick="placeMainBet('Dragon')">
+        <span class="odds">0.95</span>
+        Dragon
+        <div style="font-size:11px; margin-top:4px;" id="dragonBetAmt">0</div>
+      </button>
+      <button class="main-bet-btn tie-btn" onclick="placeMainBet('Tie')">
+        <span class="odds">45</span>
+        Tie
+        <div style="font-size:11px; margin-top:4px;" id="tieBetAmt">0</div>
+      </button>
+      <button class="main-bet-btn tiger-btn" onclick="placeMainBet('Tiger')">
+        <span class="odds">0.95</span>
+        Tiger
+        <div style="font-size:11px; margin-top:4px;" id="tigerBetAmt">0</div>
+      </button>
+    </div>
+
+    <div class="specific-bets">
+      <div class="specific-title">DRAGON 11 (MIN:100 MAX:10000)</div>
+      <div class="card-grid" id="dragonGrid"></div>
+    </div>
+    <div class="specific-bets" style="margin-top:12px;">
+      <div class="specific-title">TIGER 11 (MIN:100 MAX:10000)</div>
+      <div class="card-grid" id="tigerGrid"></div>
+    </div>
+  </div>
+
+  <!-- Last Result -->
+  <div class="last-result">
+    <div class="last-result-title">LAST RESULT</div>
+    <div id="lastResults" style="display:flex; gap:6px;"></div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <h3 style="text-align:center; color:#fbbf24; margin-bottom:10px;">📜 History & Statement</h3>
+    <div style="display:flex; justify-content:space-around; margin-bottom:10px; font-size:13px;">
+      <div>Rounds: <span id="totalRounds">0</span></div>
+      <div>Net: <span id="netProfit">0</span></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>D</th><th>T</th><th>Result</th>
+          <th>Bet</th><th>Amt</th><th>P/L</th><th>Bal</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+
+<script>
+  // ========== LIBRA TOKEN AUTH ==========
+  let currentUser = null;
+  let libraToken = null;
+  let lastLibraSyncId = null;
+  function getQuery(){
+    const q={};
+    (location.search||'').slice(1).split('&').forEach(p=>{
+      if(!p)return; const i=p.indexOf('=');
+      const k=decodeURIComponent(i<0?p:p.slice(0,i));
+      const v=decodeURIComponent(i<0?'':p.slice(i+1));
+      if(k)q[k]=v;
+    });
+    return q;
+  }
+  
+
+  document.getElementById('playerName').innerText = (currentUser&&currentUser.username)||'Player';
+
+  function libraWallet(){ return Promise.resolve(null); }
+  let masterForcedWinner = null;
+  let libraSocket = null;
+  function logLiveBet(side, card, amount){
+    try{
+      if(!libraSocket) return;
+      libraSocket.emit('live_bet', {
+        gameId: 'dragon',
+        username: (currentUser && currentUser.username) || '',
+        side: side,
+        amount: amount,
+        card: card || null,
+        roundId: currentRoundKey || lastRoundId || null
+      });
+    }catch(e){}
+  }
+  function reportRoundSync(phase, timer){
+    try{
+      if(!libraSocket) return;
+      libraSocket.emit('game_round_sync', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, phase, timer: timer||0 });
+    }catch(e){}
+  }
+
+async function loadMyCoins(){ coins=Number(currentUser&&currentUser.coins||0); }
+async function saveMyCoins(){ if(currentUser) currentUser.coins=coins; try{localStorage.setItem('dt_game_balance_'+currentUser.username,String(Math.floor(coins)))}catch(e){} updateUI(); }
+// ========== STATE ==========
+  let coins = 0;
+  let expo = 0;
+  let timer = 20;
+  let timerInterval = null;
+  let isBettingOpen = true;
+  let selectedChip = 100;
+  let betsLocked = false;
+  let currentRound = 1;
+  let history = [];
+  let lastResults = [];
+  try {
+    const savedH = localStorage.getItem('dt_player_history_' + (currentUser && currentUser.id));
+    if (savedH) history = JSON.parse(savedH);
+    const savedR = localStorage.getItem('dt_player_lastResults_' + (currentUser && currentUser.id));
+    if (savedR) lastResults = JSON.parse(savedR);
+  } catch(e) {}
+  let mainBets = { Dragon: 0, Tiger: 0, Tie: 0 };
+  let dragonCardBets = {};
+  let tigerCardBets = {};
+  let currentRoundKey = '';
+
+
+  const SUITS = ['♠','♥','♦','♣'];
+  const SUIT_COLOR = { '♠':'black', '♥':'red', '♦':'red', '♣':'black' };
+  const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const cardValues = {
+    'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,
+    '8':8,'9':9,'10':10,'J':11,'Q':12,'K':13
+  };
+  const allCards = [];
+  RANKS.forEach(r => SUITS.forEach(s => allCards.push(r + s)));
+
+  function rankOf(card) {
+    if (!card) return '';
+    const m = String(card).match(/^(10|[AJQK2-9])/);
+    return m ? m[1] : String(card);
+  }
+  function suitOf(card) {
+    if (!card) return '';
+    const m = String(card).match(/[♠♥♦♣]$/);
+    return m ? m[0] : '';
+  }
+  function cardHTML(card) {
+    if (!card) return '?';
+    const r = rankOf(card);
+    const s = suitOf(card) || '♠';
+    const color = SUIT_COLOR[s] || 'black';
+    return '<span class="suit-' + color + '"><span class="rank-line">' + r + '</span><br><span class="suit-line">' + s + '</span></span>';
+  }
+  function randomCard() {
+    return allCards[Math.floor(Math.random() * allCards.length)];
+  }
+  function randomCardOfRank(rank) {
+    if (!rank) return randomCard();
+    const pool = allCards.filter(c => rankOf(c) === rank);
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : randomCard();
+  }
+  function pickCardsForWinner(winner) {
+    if (winner === 'Tie') {
+      const r = RANKS[Math.floor(Math.random() * 13)];
+      return { dragon: randomCardOfRank(r), tiger: randomCardOfRank(r) };
+    }
+    let dragon, tiger;
+    do {
+      dragon = randomCard();
+      tiger = randomCard();
+    } while (
+      winner === 'Dragon'
+        ? cardValues[rankOf(dragon)] <= cardValues[rankOf(tiger)]
+        : cardValues[rankOf(tiger)] <= cardValues[rankOf(dragon)]
+    );
+    return { dragon, tiger };
+  }
+
+
+  async function init(){
+  await loadMyCoins(); createCardGrids(); updateUI(); renderHistory(); renderLastResults();
+  startLocalRounds();
+}
+let localRoundTimer=null, localRevealTimer=null;
+function startLocalRounds(){
+  if(localRoundTimer) clearInterval(localRoundTimer);
+  runLocalRound();
+}
+function runLocalRound(){
+  const rid='DT-'+Date.now().toString(36).toUpperCase(); currentRoundKey=rid; lastRoundId=rid; resetBetsForNewRound(rid);
+  masterForcedWinner = null;
+  reportRoundSync('betting', 10);
+  let left=10; isBettingOpen=true; betsLocked=false;
+  const tick=()=>{ document.getElementById('timer').innerText=left; if(left<=4){betsLocked=true;isBettingOpen=false;document.getElementById('status').innerText='Bets Locked'; reportRoundSync('locked', left);} else {document.getElementById('status').innerText='Betting Time'; reportRoundSync('betting', left);}
+    if(left<=0){clearInterval(localRoundTimer);isBettingOpen=false;
+      const forced = masterForcedWinner;
+      const c = forced ? pickCardsForWinner(forced) : getFinalCardsLocal();
+      setTimeout(()=>applyReveal(c.dragon,c.tiger, forced||null),450);
+      setTimeout(runLocalRound,3500); return;} left--; };
+  localRoundTimer=setInterval(tick,1000); tick();
+}
+function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; }
+
+// ========== INIT ==========
+  let lastPhase = '';
+  let lastRoundId = '';
+  let pollTimer = null;
+  let settledRoundId = '';
+
+  
+
+  
+
+  function resetBetsForNewRound(roundId) {
+    betsLocked = false;
+    isBettingOpen = true;
+    mainBets = { Dragon: 0, Tiger: 0, Tie: 0 };
+    dragonCardBets = {};
+    tigerCardBets = {};
+    expo = 0;
+    currentRoundKey = roundId || ('2E' + Date.now().toString().slice(-12));
+    document.querySelectorAll('#dragonGrid .card-bet small, #tigerGrid .card-bet small').forEach(el => el.innerText = '0');
+    updateBetAmounts();
+    updateUI();
+    const spinner = document.getElementById('spinner');
+    if (spinner) {
+      spinner.style.display = 'block';
+      setTimeout(() => spinner.style.display = 'none', 600);
+    }
+  }
+
+  function applyReveal(dragon, tiger, winnerFromServer) {
+    const dEl = document.getElementById('dragonCard');
+    const tEl = document.getElementById('tigerCard');
+    dEl.className = 'card-front';
+    dEl.innerHTML = cardHTML(dragon);
+    tEl.className = 'card-front';
+    tEl.innerHTML = cardHTML(tiger);
+
+    let winner = winnerFromServer;
+    if (!winner) {
+      if (cardValues[rankOf(dragon)] > cardValues[rankOf(tiger)]) winner = 'Dragon';
+      else if (cardValues[rankOf(tiger)] > cardValues[rankOf(dragon)]) winner = 'Tiger';
+      else winner = 'Tie';
+    }
+
+    let totalWin = 0;
+    if (mainBets[winner] > 0) {
+      const profit = (winner === 'Tie') ? mainBets[winner] * 45 : mainBets[winner] * 0.95;
+      totalWin += mainBets[winner] + profit;
+    }
+    const dRank = rankOf(dragon);
+    const tRank = rankOf(tiger);
+    if (winner === 'Dragon' && dragonCardBets[dRank]) {
+      totalWin += dragonCardBets[dRank] + dragonCardBets[dRank] * 11;
+    }
+    if (winner === 'Tiger' && tigerCardBets[tRank]) {
+      totalWin += tigerCardBets[tRank] + tigerCardBets[tRank] * 11;
+    }
+
+    coins += totalWin;
+    if(totalWin>0){ libraWallet(totalWin, 'win_'+String(winner||'')); }
+    saveMyCoins();
+
+    const totalBetAmount = mainBets.Dragon + mainBets.Tiger + mainBets.Tie +
+      Object.values(dragonCardBets).reduce((a,b)=>a+b,0) +
+      Object.values(tigerCardBets).reduce((a,b)=>a+b,0);
+    const netThisRound = totalWin - totalBetAmount;
+
+    history.unshift({
+      round: currentRound,
+      dragon, tiger, winner,
+      betSummary: `D:${mainBets.Dragon} T:${mainBets.Tiger} Tie:${mainBets.Tie}`,
+      amount: mainBets.Dragon + mainBets.Tiger + mainBets.Tie,
+      pl: netThisRound,
+      balance: coins
+    });
+    lastResults.unshift(winner === 'Dragon' ? 'D' : (winner === 'Tiger' ? 'T' : 'Tie'));
+    if (lastResults.length > 12) lastResults.pop();
+    currentRound++;
+    expo = 0;
+
+    document.getElementById('status').innerHTML =
+      `<b style="color:#fbbf24">${winner} Wins!</b> | P/L: <span class="${netThisRound>=0?'win':'loss'}">${netThisRound>=0?'+':''}${netThisRound}</span>`;
+
+    try{ if(libraSocket) libraSocket.emit('game_result_report', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, winner }); }catch(e){}
+    masterForcedWinner = null;
+    renderHistory();
+    renderLastResults();
+    updateUI();
+  }
+
+  
+
+  
+
+  function doLogout() {
+    localStorage.removeItem('dt_user');
+    window.location.href = '/dashboard';
+  }
+
+  function createCardGrids() {
+    const dGrid = document.getElementById('dragonGrid');
+    const tGrid = document.getElementById('tigerGrid');
+    dGrid.innerHTML = '';
+    tGrid.innerHTML = '';
+    RANKS.forEach(c => {
+      const dBtn = document.createElement('div');
+      dBtn.className = 'card-bet';
+      dBtn.innerHTML = `${c}<small>0</small>`;
+      dBtn.onclick = () => placeSpecificBet('Dragon', c, dBtn);
+      dGrid.appendChild(dBtn);
+
+      const tBtn = document.createElement('div');
+      tBtn.className = 'card-bet';
+      tBtn.innerHTML = `${c}<small>0</small>`;
+      tBtn.onclick = () => placeSpecificBet('Tiger', c, tBtn);
+      tGrid.appendChild(tBtn);
+    });
+  }
+
+  function startNewRound() {
+    // Disabled: players now follow admin game_state via pollGameState()
+  }
+
+  function selChip(el){
+    document.querySelectorAll('.chip-btn').forEach(c=>c.classList.remove('active'));
+    el.classList.add('active');
+    selectedChip = parseInt(el.dataset.v,10)||100;
+  }
+
+  function placeMainBet(side) {
+    if (!isBettingOpen || betsLocked) return alert('Betting locked!');
+    const amount = selectedChip || 100;
+    if (coins < amount) return alert('Coins kam hain!');
+    mainBets[side] += amount;
+    coins -= amount;
+    expo += amount;
+    libraWallet(-amount, 'bet_'+side);
+    updateBetAmounts();
+    updateUI();
+    saveMyCoins();
+    logLiveBet(side, null, amount);
+  }
+
+  function placeSpecificBet(side, card, btn) {
+    if (!isBettingOpen || betsLocked) return alert('Betting locked!');
+    const amount = selectedChip || 100;
+    if (coins < amount) return alert('Coins kam hain!');
+    if (side === 'Dragon') {
+      dragonCardBets[card] = (dragonCardBets[card] || 0) + amount;
+    } else {
+      tigerCardBets[card] = (tigerCardBets[card] || 0) + amount;
+    }
+    coins -= amount;
+    expo += amount;
+    libraWallet(-amount, 'bet_card_'+side);
+    btn.querySelector('small').innerText = (side === 'Dragon' ? dragonCardBets[card] : tigerCardBets[card]);
+    updateUI();
+    saveMyCoins();
+    logLiveBet(side === 'Dragon' ? 'DragonCard' : 'TigerCard', card, amount);
+  }
+
+  
+
+  function updateBetAmounts() {
+    document.getElementById('dragonBetAmt').innerText = mainBets.Dragon;
+    document.getElementById('tigerBetAmt').innerText = mainBets.Tiger;
+    document.getElementById('tieBetAmt').innerText = mainBets.Tie;
+  }
+
+  function pickCardsForWinner(winner) {
+    // Generates two random cards that produce the requested winner
+    if (winner === 'Tie') {
+      const c = allCards[Math.floor(Math.random()*13)];
+      return { dragon: c, tiger: c };
+    }
+    let dragon, tiger;
+    do {
+      dragon = allCards[Math.floor(Math.random()*13)];
+      tiger = allCards[Math.floor(Math.random()*13)];
+    } while (
+      winner === 'Dragon'
+        ? cardValues[dragon] <= cardValues[tiger]
+        : cardValues[tiger] <= cardValues[dragon]
+    );
+    return { dragon, tiger };
+  }
+
+  
+
+  
+
+  function updateUI() {
+    document.getElementById('coins').innerText = Number(coins).toFixed(2);
+    document.getElementById('expo').innerText = expo;
+  }
+
+  function renderLastResults() {
+    const box = document.getElementById('lastResults');
+    box.innerHTML = '';
+    lastResults.forEach(r => {
+      const div = document.createElement('div');
+      if (r === 'D') {
+        div.className = 'result-circle d-circle';
+        div.innerText = 'D';
+      } else if (r === 'T') {
+        div.className = 'result-circle t-circle';
+        div.innerText = 'T';
+      } else {
+        div.className = 'result-circle';
+        div.style.background = '#6b7280';
+        div.innerText = '=';
+      }
+      box.appendChild(div);
+    });
+  }
+
+  function persistPlayerHistory() {
+    try {
+      const uid = currentUser && currentUser.id;
+      localStorage.setItem('dt_player_history_' + uid, JSON.stringify(history.slice(0, 100)));
+      localStorage.setItem('dt_player_lastResults_' + uid, JSON.stringify(lastResults));
+    } catch(e) {}
+  }
+
+  function renderHistory() {
+    persistPlayerHistory();
+    const tbody = document.getElementById('historyBody');
+    tbody.innerHTML = '';
+    let net = 0;
+    history.forEach((h) => {
+      net += h.pl;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${h.round}</td>
+        <td>${h.dragon}</td>
+        <td>${h.tiger}</td>
+        <td>${h.winner}</td>
+        <td style="font-size:10px">${h.betSummary}</td>
+        <td>${h.amount}</td>
+        <td class="${h.pl>=0?'win':'loss'}">${h.pl>=0?'+':''}${h.pl}</td>
+        <td>${h.balance.toFixed(0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('totalRounds').innerText = history.length;
+    document.getElementById('netProfit').innerText = (net>=0?'+':'') + net;
+    document.getElementById('netProfit').className = net>=0 ? 'win' : 'loss';
+  }
+
+  // Start
+  init();
+</script>
+<script src="/socket.io/socket.io.js"></script><script>
+(async function(){
+  const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
+  const q=new URLSearchParams(location.search); const token=(stored&&stored.token)||q.get('token')||''; const username=(stored&&stored.username)||q.get('user')||q.get('username')||'';
+  if(!token||!username){document.body.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p>Open Dragon Tiger from your Libra 24 dashboard.</p></div></div>';return;}
+  try{const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:'dragon'})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'Access denied');
+    currentUser=d.user; libraToken=token; document.getElementById('playerName').innerText=d.user.username;
+    const so=io(); libraSocket=so; so.emit('auth',{username,token});
+    so.emit('join_game_room',{gameId:'dragon'});
+    so.on('games_updated',gs=>{if(gs&&gs.dragon&&!gs.dragon.active)location.href='/dashboard';});
+    so.on('master_force_result', d=>{ if(d&&d.gameId==='dragon'){ masterForcedWinner=d.winner||null; }});
+    so.on('live_game_update', g=>{ if(g&&g.id==='dragon'&&g.forcedWinner) masterForcedWinner=g.forcedWinner; });
+    await init();
+  }catch(e){document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;padding:10px 16px;background:#fff;color:#000;border-radius:8px">Back</a></div></div>`; }
+})();
+</script></body>
+</html>
 
