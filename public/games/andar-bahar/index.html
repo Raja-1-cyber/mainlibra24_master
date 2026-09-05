@@ -394,11 +394,11 @@ function startListeners(){
   fdb.ref(ROOT+'/users').on('value',s=>{
     usersCache=s.val()||{};
     if(session.role==='player'&&session.username&&usersCache[session.username]){
-      document.getElementById('p-coins').textContent=Number(usersCache[session.username].coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      var _pc=document.getElementById('p-coins'); if(_pc) _pc.textContent=Number(usersCache[session.username].coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     }
   });
 }
-document.getElementById('login-status').textContent='Connecting…';
+var _ls=document.getElementById('login-status'); if(_ls) _ls.textContent='Connecting…';
 initGameState().then(()=>{startListeners();tryTokenAccess()}).catch(e=>{ console.error(e); tryTokenAccess(); });
 
 
@@ -705,7 +705,7 @@ function onRoundUpdate(){
     document.getElementById('p-round-id').textContent='ROUND ID: '+(r.id||'—');
     const sr=document.getElementById('p-stage-round');
     if(sr) sr.textContent=r.id?('ID '+r.id):'';
-    document.getElementById('p-timer').textContent=(r.timer>0?r.timer:0)+'s';
+    void(0); var __pt=document.getElementById('p-timer'); if(__pt) __pt.textContent=(r.timer>0?r.timer:0)+'s';
     document.getElementById('p-expo').textContent=myExpo;
     const canBet=r.phase==='betting';
     document.querySelectorAll('.main-bet').forEach(b=>canBet?b.classList.remove('disabled'):b.classList.add('disabled'));
@@ -912,5 +912,28 @@ h1,h2,h3{font-size:14px!important}
   }, 3000);
 })();
 </script>
+
+<script>
+/* LIBRA_FORCE_ENGINE - keep rounds moving even if Firebase slow */
+(function(){
+  function kick(){
+    try{
+      if(typeof ensureAutoEngine==='function') ensureAutoEngine();
+      else if(typeof autoStartRound==='function' && typeof roundCache!=='undefined'){
+        var r=roundCache||{};
+        var ph=r.phase||'idle';
+        if(ph==='idle'||ph==='result'||!ph){
+          if(typeof engineTimer!=='undefined' && !engineTimer && typeof nextRoundTimer!=='undefined' && !nextRoundTimer)
+            autoStartRound();
+        } else if((ph==='betting'||ph==='locked') && typeof engineTimer!=='undefined' && !engineTimer && typeof startEngineTick==='function')
+          startEngineTick();
+      }
+    }catch(e){ console.warn('kick',e); }
+  }
+  setTimeout(kick, 1500);
+  setInterval(kick, 5000);
+})();
+</script>
+
 </body>
 </html>
