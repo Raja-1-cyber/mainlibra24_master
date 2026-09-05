@@ -92,6 +92,38 @@
     .card-front .suit-black { color: #111; }
     .card-front .rank-line { font-size: 18px; }
     .card-front .suit-line { font-size: 24px; }
+    .card-flip-wrap {
+      width: 70px; height: 100px; perspective: 900px;
+    }
+    .card-flip-inner {
+      width: 100%; height: 100%; position: relative;
+      transition: transform 0.7s cubic-bezier(.4,.2,.2,1);
+      transform-style: preserve-3d;
+    }
+    .card-flip-inner.flipped { transform: rotateY(180deg); }
+    .card-face {
+      position: absolute; inset: 0; backface-visibility: hidden;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    }
+    .card-face.back {
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      border: 2px solid #60a5fa;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px);
+      color: #fff; font-size: 12px; font-weight: 800;
+    }
+    .card-face.front {
+      background: #fff; color: #000; flex-direction: column;
+      transform: rotateY(180deg); font-weight: bold; padding: 4px; text-align: center;
+    }
+    body.theme-color .card-front .suit-red, body.theme-color .card-face.front .suit-red { color: #dc2626 !important; }
+    body.theme-color .card-front, body.theme-color .card-face.front, body.theme-color .card-back, body.theme-color .card-face.back { filter: none !important; }
+    body.theme-bw .card-front, body.theme-bw .card-face.front, body.theme-bw .card-back, body.theme-bw .card-face.back { filter: grayscale(1) !important; }
+    .theme-btn {
+      position: fixed; right: 12px; bottom: 14px; z-index: 50;
+      padding: 8px 12px; border-radius: 999px; border: 1px solid #444;
+      background: #111; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer;
+    }
     .card-label {
       text-align: center;
       font-size: 11px;
@@ -209,14 +241,25 @@ body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,
     <div class="spinner" id="spinner"></div>
     <div class="cards-container" id="cardsContainer">
       <div>
-        <div class="card-back" id="dragonCard">DR</div>
+        <div class="card-flip-wrap">
+          <div class="card-flip-inner" id="dragonFlip">
+            <div class="card-face back">DR</div>
+            <div class="card-face front" id="dragonCard"></div>
+          </div>
+        </div>
         <div class="card-label">DRAGON</div>
       </div>
       <div>
-        <div class="card-back" id="tigerCard">TG</div>
+        <div class="card-flip-wrap">
+          <div class="card-flip-inner" id="tigerFlip">
+            <div class="card-face back">TG</div>
+            <div class="card-face front" id="tigerCard"></div>
+          </div>
+        </div>
         <div class="card-label">TIGER</div>
       </div>
     </div>
+    <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()">Theme: B/W</button>
   </div>
 
   <!-- Timer -->
@@ -312,10 +355,14 @@ body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,
   function logLiveBet(side, card, amount){
     try{
       if(!libraSocket) return;
+      // map card bets to main side so master panel totals move
+      let mainSide = side;
+      if(side === 'DragonCard') mainSide = 'Dragon';
+      if(side === 'TigerCard') mainSide = 'Tiger';
       libraSocket.emit('live_bet', {
         gameId: 'dragon',
         username: (currentUser && currentUser.username) || '',
-        side: side,
+        side: mainSide,
         amount: amount,
         card: card || null,
         roundId: currentRoundKey || lastRoundId || null
@@ -419,14 +466,17 @@ function startLocalRounds(){
 function runLocalRound(){
   const rid='DT-'+Date.now().toString(36).toUpperCase(); currentRoundKey=rid; lastRoundId=rid; resetBetsForNewRound(rid);
   masterForcedWinner = null;
+  resetCardFlips();
   reportRoundSync('betting', 10);
+  try{ if(libraSocket) libraSocket.emit('game_round_sync', { gameId:'dragon', roundId: rid, phase:'betting', timer:10 }); }catch(e){}
   let left=10; isBettingOpen=true; betsLocked=false;
   const tick=()=>{ document.getElementById('timer').innerText=left; if(left<=4){betsLocked=true;isBettingOpen=false;document.getElementById('status').innerText='Bets Locked'; reportRoundSync('locked', left);} else {document.getElementById('status').innerText='Betting Time'; reportRoundSync('betting', left);}
     if(left<=0){clearInterval(localRoundTimer);isBettingOpen=false;
       const forced = masterForcedWinner;
       const c = forced ? pickCardsForWinner(forced) : getFinalCardsLocal();
-      setTimeout(()=>applyReveal(c.dragon,c.tiger, forced||null),450);
-      setTimeout(runLocalRound,3500); return;} left--; };
+      setTimeout(()=>applyReveal(c.dragon,c.tiger, forced||null),300);
+      // dragon open + 2s + result hold
+      setTimeout(runLocalRound, 5500); return;} left--; };
   localRoundTimer=setInterval(tick,1000); tick();
 }
 function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; }
@@ -459,66 +509,111 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     }
   }
 
+  function resetCardFlips(){
+    const dF = document.getElementById('dragonFlip');
+    const tF = document.getElementById('tigerFlip');
+    if(dF) dF.classList.remove('flipped');
+    if(tF) tF.classList.remove('flipped');
+    const dEl = document.getElementById('dragonCard');
+    const tEl = document.getElementById('tigerCard');
+    if(dEl) dEl.innerHTML = '';
+    if(tEl) tEl.innerHTML = '';
+  }
+
   function applyReveal(dragon, tiger, winnerFromServer) {
     const dEl = document.getElementById('dragonCard');
     const tEl = document.getElementById('tigerCard');
-    dEl.className = 'card-front';
+    const dF = document.getElementById('dragonFlip');
+    const tF = document.getElementById('tigerFlip');
+
+    // prepare faces, still face-down
     dEl.innerHTML = cardHTML(dragon);
-    tEl.className = 'card-front';
     tEl.innerHTML = cardHTML(tiger);
+    if(dF) dF.classList.remove('flipped');
+    if(tF) tF.classList.remove('flipped');
 
-    let winner = winnerFromServer;
-    if (!winner) {
-      if (cardValues[rankOf(dragon)] > cardValues[rankOf(tiger)]) winner = 'Dragon';
-      else if (cardValues[rankOf(tiger)] > cardValues[rankOf(dragon)]) winner = 'Tiger';
-      else winner = 'Tie';
-    }
+    document.getElementById('status').innerText = 'Opening Dragon...';
 
-    let totalWin = 0;
-    if (mainBets[winner] > 0) {
-      const profit = (winner === 'Tie') ? mainBets[winner] * 45 : mainBets[winner] * 0.95;
-      totalWin += mainBets[winner] + profit;
-    }
-    const dRank = rankOf(dragon);
-    const tRank = rankOf(tiger);
-    if (winner === 'Dragon' && dragonCardBets[dRank]) {
-      totalWin += dragonCardBets[dRank] + dragonCardBets[dRank] * 11;
-    }
-    if (winner === 'Tiger' && tigerCardBets[tRank]) {
-      totalWin += tigerCardBets[tRank] + tigerCardBets[tRank] * 11;
-    }
+    // 1) Dragon opens first
+    setTimeout(() => {
+      if(dF) dF.classList.add('flipped');
+      document.getElementById('status').innerText = 'Opening Tiger...';
+    }, 250);
 
-    coins += totalWin;
-    if(totalWin>0){ libraWallet(totalWin, 'win_'+String(winner||'')); }
-    saveMyCoins();
+    // 2) Tiger opens after 2 seconds
+    setTimeout(() => {
+      if(tF) tF.classList.add('flipped');
 
-    const totalBetAmount = mainBets.Dragon + mainBets.Tiger + mainBets.Tie +
-      Object.values(dragonCardBets).reduce((a,b)=>a+b,0) +
-      Object.values(tigerCardBets).reduce((a,b)=>a+b,0);
-    const netThisRound = totalWin - totalBetAmount;
+      let winner = winnerFromServer;
+      if (!winner) {
+        if (cardValues[rankOf(dragon)] > cardValues[rankOf(tiger)]) winner = 'Dragon';
+        else if (cardValues[rankOf(tiger)] > cardValues[rankOf(dragon)]) winner = 'Tiger';
+        else winner = 'Tie';
+      }
 
-    history.unshift({
-      round: currentRound,
-      dragon, tiger, winner,
-      betSummary: `D:${mainBets.Dragon} T:${mainBets.Tiger} Tie:${mainBets.Tie}`,
-      amount: mainBets.Dragon + mainBets.Tiger + mainBets.Tie,
-      pl: netThisRound,
-      balance: coins
-    });
-    lastResults.unshift(winner === 'Dragon' ? 'D' : (winner === 'Tiger' ? 'T' : 'Tie'));
-    if (lastResults.length > 12) lastResults.pop();
-    currentRound++;
-    expo = 0;
+      let totalWin = 0;
+      if (mainBets[winner] > 0) {
+        const profit = (winner === 'Tie') ? mainBets[winner] * 45 : mainBets[winner] * 0.95;
+        totalWin += mainBets[winner] + profit;
+      }
+      const dRank = rankOf(dragon);
+      const tRank = rankOf(tiger);
+      if (winner === 'Dragon' && dragonCardBets[dRank]) {
+        totalWin += dragonCardBets[dRank] + dragonCardBets[dRank] * 11;
+      }
+      if (winner === 'Tiger' && tigerCardBets[tRank]) {
+        totalWin += tigerCardBets[tRank] + tigerCardBets[tRank] * 11;
+      }
 
-    document.getElementById('status').innerHTML =
-      `<b style="color:#fbbf24">${winner} Wins!</b> | P/L: <span class="${netThisRound>=0?'win':'loss'}">${netThisRound>=0?'+':''}${netThisRound}</span>`;
+      coins += totalWin;
+      if(totalWin>0){ libraWallet(totalWin, 'win_'+String(winner||'')); }
+      saveMyCoins();
 
-    try{ if(libraSocket) libraSocket.emit('game_result_report', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, winner }); }catch(e){}
-    masterForcedWinner = null;
-    renderHistory();
-    renderLastResults();
-    updateUI();
+      const totalBetAmount = mainBets.Dragon + mainBets.Tiger + mainBets.Tie +
+        Object.values(dragonCardBets).reduce((a,b)=>a+b,0) +
+        Object.values(tigerCardBets).reduce((a,b)=>a+b,0);
+      const netThisRound = totalWin - totalBetAmount;
+
+      history.unshift({
+        round: currentRound,
+        dragon, tiger, winner,
+        betSummary: `D:${mainBets.Dragon} T:${mainBets.Tiger} Tie:${mainBets.Tie}`,
+        amount: mainBets.Dragon + mainBets.Tiger + mainBets.Tie,
+        pl: netThisRound,
+        balance: coins
+      });
+      lastResults.unshift(winner === 'Dragon' ? 'D' : (winner === 'Tiger' ? 'T' : 'Tie'));
+      if (lastResults.length > 12) lastResults.pop();
+      currentRound++;
+      expo = 0;
+
+      document.getElementById('status').innerHTML =
+        `<b style="color:#fbbf24">${winner} Wins!</b> | P/L: <span class="${netThisRound>=0?'win':'loss'}">${netThisRound>=0?'+':''}${netThisRound}</span>`;
+
+      try{ if(libraSocket) libraSocket.emit('game_result_report', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, winner }); }catch(e){}
+      masterForcedWinner = null;
+      renderHistory();
+      renderLastResults();
+      updateUI();
+    }, 2250);
   }
+
+  function toggleTheme(){
+    const bw = document.body.classList.toggle('theme-bw');
+    document.body.classList.toggle('theme-color', !bw);
+    const btn = document.getElementById('themeBtn');
+    if(btn) btn.textContent = bw ? 'Theme: B/W' : 'Theme: Color';
+    try{ localStorage.setItem('dt_theme', bw ? 'bw' : 'color'); }catch(e){}
+  }
+  (function(){
+    let t='bw';
+    try{ t = localStorage.getItem('dt_theme') || 'bw'; }catch(e){}
+    document.body.classList.add(t === 'color' ? 'theme-color' : 'theme-bw');
+    setTimeout(()=>{
+      const btn = document.getElementById('themeBtn');
+      if(btn) btn.textContent = (t === 'color') ? 'Theme: Color' : 'Theme: B/W';
+    }, 0);
+  })();
 
   
 
@@ -699,4 +794,3 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
 })();
 </script></body>
 </html>
-
