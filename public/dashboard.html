@@ -61,7 +61,7 @@
     function renderGames(games) {
       const grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
-      Object.values(games || {}).filter(g => g.active).sort((a,b) => (a.order||0)-(b.order||0)).forEach(g => {
+      Object.values(games || {}).filter(g => g.active !== false).sort((a,b) => (a.order||0)-(b.order||0)).forEach(g => {
         const card = document.createElement('div');
         card.className = 'game-card';
         card.innerHTML = (g.image ? `<img src="${g.image}" alt="">` : `<div class="game-placeholder">${(g.name||'?')[0]}</div>`) + `<div class="game-name">${g.name}</div>`;
@@ -74,7 +74,8 @@
     function enterGame(gameId) {
       socket.emit('player_enter_game', { gameId }, res => {
         if (!res.success) return toast(res.message || 'Game not available');
-        if (res.url) location.href = res.url;
+        const url = res.url || ({dragon:'/games/dragon-tiger/index.html',teenpatti:'/games/teen-patti/index.html',andarbahar:'/games/andar-bahar/index.html',lucky7:'/games/lucky-7/index.html'})[gameId];
+        if (url) location.href = url;
         else toast('Game URL missing');
       });
     }
