@@ -209,7 +209,33 @@
     .ctrl-start{background:linear-gradient(90deg,#facc15,#eab308);color:#000}
     .ctrl-auto{background:#1e293b;color:#e2e8f0;border:1px solid #334155}
 
-  </style>
+  
+    /* ===== MOBILE FRIENDLY ===== */
+    @media (max-width: 600px) {
+      body { font-size: 12px !important; }
+      .top-bar { padding: 6px 8px !important; gap: 6px !important; flex-wrap: wrap; }
+      .logo { font-size: 14px !important; }
+      .balance-bar { font-size: 11px !important; padding: 4px 8px !important; }
+      .game-header { font-size: 11px !important; padding: 6px 8px !important; }
+      .cards-area { min-height: 140px !important; padding: 8px !important; }
+      .card-flip-wrap, .card-back, .card-front { width: 52px !important; height: 74px !important; }
+      .card-face { font-size: 10px !important; }
+      .card-face.front { font-size: 14px !important; }
+      .card-label { font-size: 9px !important; }
+      .cards-container { gap: 18px !important; }
+      .timer-box { font-size: 18px !important; }
+      .status { font-size: 12px !important; padding: 4px !important; }
+      .bet-section { padding: 8px !important; }
+      .bet-btn, .chip-btn, .card-bet { font-size: 11px !important; padding: 8px 10px !important; min-height: 36px; }
+      .theme-btn { font-size: 10px !important; padding: 6px 10px !important; bottom: 10px; right: 8px; }
+      table { font-size: 10px !important; }
+      h3 { font-size: 13px !important; }
+    }
+    @media (max-width: 380px) {
+      .card-flip-wrap, .card-back, .card-front { width: 44px !important; height: 64px !important; }
+      .cards-container { gap: 12px !important; }
+    }
+</style>
 <style>
 body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,.history-section,.last-result{background:#0a0a0a!important;border-color:#292929!important}.balance-bar{background:#fff!important;color:#000!important}.logo{color:#fff!important}.coins{color:#000!important}.expo{color:#555!important}.card-bet,.chip-btn,.bet-btn{background:#111!important;color:#fff!important;border:1px solid #444!important}.card-bet.active,.chip-btn.active,.bet-btn:hover{background:#fff!important;color:#000!important}.card-front,.card-back{filter:grayscale(1)}table th{background:#111!important;color:#fff!important}h3{color:#fff!important}.win{color:#fff!important}.loss{color:#aaa!important}</style>
 </head>
@@ -532,12 +558,12 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     if(dF) dF.classList.remove('flipped');
     if(tF) tF.classList.remove('flipped');
 
-    document.getElementById('status').innerText = 'Opening Dragon...';
+    /* silent reveal */
 
     // 1) Dragon opens first
     setTimeout(() => {
       if(dF) dF.classList.add('flipped');
-      document.getElementById('status').innerText = 'Opening Tiger...';
+      /* keep quiet while cards flip */
     }, 250);
 
     // 2) Tiger opens after 2 seconds
@@ -784,8 +810,11 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
   if(!token||!username){document.body.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p>Open Dragon Tiger from your Libra 24 dashboard.</p></div></div>';return;}
   try{const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:'dragon'})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'Access denied');
     currentUser=d.user; libraToken=token; document.getElementById('playerName').innerText=d.user.username;
-    const so=io(); libraSocket=so; so.emit('auth',{username,token});
-    so.emit('join_game_room',{gameId:'dragon'});
+    const so=io(); libraSocket=so;
+    so.emit('auth',{username,token}, function(res){
+      if(!res || !res.success){ console.warn('auth failed'); }
+      so.emit('join_game_room',{gameId:'dragon'});
+    });
     so.on('games_updated',gs=>{if(gs&&gs.dragon&&!gs.dragon.active)location.href='/dashboard';});
     so.on('master_force_result', d=>{ if(d&&d.gameId==='dragon'){ masterForcedWinner=d.winner||null; }});
     so.on('live_game_update', g=>{ if(g&&g.id==='dragon'&&g.forcedWinner) masterForcedWinner=g.forcedWinner; });
