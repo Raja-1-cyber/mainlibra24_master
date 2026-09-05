@@ -808,6 +808,36 @@ window.socketioGameBoot=function(user,token){
   window.addEventListener('DOMContentLoaded',boot);
 })();
 </script>
+
+<style id="libra-theme-toggle">
+.theme-btn{position:fixed;right:12px;bottom:14px;z-index:9999;padding:8px 12px;border-radius:999px;border:1px solid #444;background:#111;color:#fff;font-size:11px;font-weight:700;cursor:pointer}
+body.theme-color .card-front,body.theme-color .playing-card,body.theme-color .mini-card,body.theme-color .card-face{filter:none!important}
+body.theme-bw .card-front,body.theme-bw .playing-card,body.theme-bw .mini-card,body.theme-bw .card-face,body.theme-bw img{filter:grayscale(1)!important}
+</style>
+<script>
+(function(){
+  function apply(t){
+    document.body.classList.remove('theme-bw','theme-color');
+    document.body.classList.add(t==='color'?'theme-color':'theme-bw');
+    var b=document.getElementById('libraThemeBtn');
+    if(b) b.textContent=t==='color'?'Theme: Color':'Theme: B/W';
+  }
+  function boot(){
+    if(document.getElementById('libraThemeBtn')) return;
+    var btn=document.createElement('button');
+    btn.id='libraThemeBtn'; btn.className='theme-btn'; btn.type='button';
+    btn.onclick=function(){
+      var next=document.body.classList.contains('theme-color')?'bw':'color';
+      try{localStorage.setItem('libra_game_theme',next)}catch(e){}
+      apply(next);
+    };
+    document.body.appendChild(btn);
+    var t='bw'; try{t=localStorage.getItem('libra_game_theme')||'bw'}catch(e){}
+    apply(t);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+})();
+</script>
+
 </body>
 </html>
-
