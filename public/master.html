@@ -180,7 +180,16 @@
     socket.emit('auth', { username: user.username, token: user.token }, res => {
       if (!res.success) { localStorage.removeItem('l24'); location.href = '/login'; return; }
       socket.emit('get_state');
+      socket.emit('get_live_games', r => {
+        if (r && r.success && r.liveGames) { liveGamesCache = r.liveGames; if (typeof renderLiveGames === 'function') renderLiveGames(); }
+      });
     });
+    // backup poll so totals always refresh
+    setInterval(() => {
+      socket.emit('get_live_games', r => {
+        if (r && r.success && r.liveGames) { liveGamesCache = r.liveGames; if (typeof renderLiveGames === 'function') renderLiveGames(); }
+      });
+    }, 2000);
 
     function tab(el) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
