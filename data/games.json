@@ -1,1 +1,34 @@
-
+{
+  "dragon": {
+    "id": "dragon",
+    "name": "Dragon Tiger",
+    "image": "",
+    "url": "/games/dragon-tiger/index.html",
+    "active": true,
+    "order": 1
+  },
+  "teenpatti": {
+    "id": "teenpatti",
+    "name": "Teen Patti",
+    "image": "",
+    "url": "/games/teen-patti/index.html",
+    "active": true,
+    "order": 2
+  },
+  "andarbahar": {
+    "id": "andarbahar",
+    "name": "Andar Bahar",
+    "image": "",
+    "url": "/games/andar-bahar/index.html",
+    "active": true,
+    "order": 3
+  },
+  "lucky7": {
+    "id": "lucky7",
+    "name": "Lucky 7",
+    "image": "",
+    "url": "/games/lucky-7/index.html",
+    "active": true,
+    "order": 4
+  }
+}
