@@ -444,26 +444,35 @@ function getQuery(){
 async function enterPlayer(u, libraCoins){
   session.role='player';
   session.username=u;
-  const snap=await db.ref('users/'+u).once('value');
   let coins=0;
   if(libraCoins!==undefined && libraCoins!==null && !isNaN(Number(libraCoins))){
     coins=Math.max(0, Math.floor(Number(libraCoins)));
-  } else if(snap.exists()){
-    coins=Number(snap.val().coins)||0;
   }
-  await db.ref('users/'+u).set({ pass:'token', coins:coins, isAdmin:false, fromLibra:true });
-  
-  
-  document.getElementById('player-app').classList.remove('hidden');
-  const el=document.getElementById('player-username');
-  if(el) el.textContent=u;
-  const pc=document.getElementById('p-coins')||document.getElementById('player-coins');
-  if(pc) pc.textContent=Number(coins).toLocaleString();
+  // Show UI first (don't depend on Firebase)
+  try{
+    const ls=document.getElementById('login-screen'); if(ls) ls.style.display='none';
+    const pa=document.getElementById('player-app'); if(pa) pa.classList.remove('hidden');
+    const el=document.getElementById('player-username'); if(el) el.textContent=u;
+    const pc=document.getElementById('p-coins')||document.getElementById('player-coins');
+    if(pc) pc.textContent=Number(coins).toLocaleString();
+  }catch(e){ console.error(e); }
   myBets={ down:0, exact:0, up:0 }; myExpo=0;
   try{ localHist=JSON.parse(localStorage.getItem('l7hist_'+u)||'[]'); }catch(e){ localHist=[]; }
   lastRoundId=null; lastResultId=null;
-  onRoundUpdate();
-  renderPlayerHistory();
+  try{ onRoundUpdate(); }catch(e){}
+  try{ renderPlayerHistory(); }catch(e){}
+  // Firebase optional sync
+  try{
+    if(typeof db!=='undefined'){
+      const snap=await db.ref('users/'+u).once('value');
+      if(!(libraCoins!==undefined && libraCoins!==null) && snap.exists()){
+        coins=Number(snap.val().coins)||coins;
+        const pc=document.getElementById('p-coins')||document.getElementById('player-coins');
+        if(pc) pc.textContent=Number(coins).toLocaleString();
+      }
+      await db.ref('users/'+u).set({ pass:'token', coins:coins, isAdmin:false, fromLibra:true });
+    }
+  }catch(e){ console.warn('firebase enter optional fail', e); }
 }
 async function doLogin(){}
 function doLogout(){
@@ -647,6 +656,7 @@ async function tryTokenAccess(){
   }catch(e){console.error(e);}
 }
 
+window.tryTokenAccess=tryTokenAccess;
 function selChip(el) {
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
@@ -817,7 +827,7 @@ function renderPlayerHistory() {
 window.socketioGameBoot=function(user,token){
   try{ const so=window.__l24socket||(window.__l24socket=io()); so.emit('auth',{username:user.username,token},function(res){if(!res.success){location.href='/login';return;}});
     so.emit('join_game_room',{gameId:'lucky7'});
-    so.on('games_updated',function(gs){ const g=gs && gs['lucky7']; if(g && !g.active) location.href='/dashboard'; });
+    so.on('games_updated',function(gs){ /* keep player in game even if flag races */ });
     so.on('master_force_result', function(d){ if(d && d.gameId==='lucky7'){ masterForcedWinner = d.winner || null; }});
     so.on('live_game_update', function(g){ if(g && g.id==='lucky7' && g.forcedWinner){ masterForcedWinner = g.forcedWinner; }});
   }catch(e){}
@@ -836,10 +846,15 @@ window.socketioGameBoot=function(user,token){
     try{
       const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:GAME_ID})});
       const data=await r.json();
-      if(!r.ok||!data.success) throw new Error(data.message||'Access denied');
+      if(!r.ok||!data.success) throw new Error((data&&data.message)||('Access denied ('+r.status+') — login again from dashboard'));
       window.LIBRA_GAME_SESSION=data.user; window.LIBRA_GAME_TOKEN=token;
+      libraToken=token;
       if(window.socketioGameBoot) window.socketioGameBoot(data.user,token);
-      if(window.tryTokenAccess) await window.tryTokenAccess();
+      // Always enter player UI (token already verified by server)
+      try{
+        if(typeof enterPlayer==='function') await enterPlayer(data.user.username, data.user.coins);
+        else if(window.tryTokenAccess) await window.tryTokenAccess();
+      }catch(err){ console.error('enterPlayer', err); }
     }catch(e){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px;color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;margin-top:16px;padding:11px 18px;border:1px solid #555;background:#fff;color:#000;border-radius:10px;font-weight:700">Back to Libra 24</a></div></div>`; }
   }
   window.addEventListener('DOMContentLoaded',boot);
