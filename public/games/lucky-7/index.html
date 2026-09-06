@@ -485,11 +485,51 @@ function doLogout(){
 const LIBRA_API=(function(){try{const q=new URLSearchParams(location.search);return q.get('api')||'https://libra24.onrender.com'}catch(e){return 'https://libra24.onrender.com'}})();
 window.libraToken=null; let lastLibraSyncId=null;
 function libraWallet(delta, reason){
-  if(!session.username||!window.libraToken) return Promise.resolve();
-  return fetch('https://libra24.onrender.com/api/wallet/adjust',{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({username:session.username,token:window.libraToken,delta:Number(delta)||0,reason:reason||'',game:'Lucky 7'})
-  }).then(r=>r.json()).then(j=>{ console.log('Libra', j); return j; }).catch(e=>null);
+  delta = Number(delta)||0;
+  if(!delta) return Promise.resolve(null);
+  var user = (typeof session!=='undefined' && session && session.username) ? session.username
+    : (typeof currentUser!=='undefined' && currentUser && currentUser.username) ? currentUser.username : '';
+  var token = (typeof window!=='undefined' && window.libraToken) ? window.libraToken
+    : (typeof libraToken!=='undefined' ? libraToken : '');
+  if(!user || !token){
+    // still update local UI coins if possible
+    return Promise.resolve(null);
+  }
+  function applyLocal(coins){
+    try{
+      if(typeof coins==='number'){
+        if(typeof currentUser!=='undefined' && currentUser) currentUser.coins = coins;
+        if(typeof session!=='undefined' && session) session.coins = coins;
+        var el = document.getElementById('p-coins') || document.getElementById('coins') || document.getElementById('player-coins');
+        if(el) el.textContent = Number(coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(typeof window.coins==='number' || typeof coins!=='undefined'){
+          try{ if(typeof window.coins==='number') window.coins = coins; }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+  // Prefer socket
+  try{
+    var so = window.__l24socket || (typeof libraSocket!=='undefined' ? libraSocket : null);
+    if(so && so.connected){
+      return new Promise(function(resolve){
+        so.emit('wallet_adjust', { delta: delta, reason: reason||'', game: reason||'' }, function(res){
+          if(res && res.success){ applyLocal(res.coins); resolve(res); }
+          else resolve(res||null);
+        });
+        setTimeout(function(){ resolve(null); }, 4000);
+      });
+    }
+  }catch(e){}
+  // HTTP fallback
+  return fetch('/api/wallet/adjust', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username:user, token:token, delta:delta, reason:reason||'', game:reason||'' })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.success) applyLocal(d.coins);
+    return d;
+  }).catch(function(e){ console.warn('wallet', e); return null; });
 }
 
 
@@ -683,7 +723,7 @@ async function placeBet(type) {
   document.getElementById('amt-' + type).textContent = myBets[type];
   document.getElementById('bet-' + type).classList.add('selected');
   document.getElementById('p-expo').textContent = myExpo;
-  toast('Bet ₹' + chip + ' on ' + resultLabel(type));
+  toast('Bet ₹' + chip + ' on ' + resultLabel(type)); try{ libraWallet(-chip, 'bet_'+type); }catch(e){}
   try{
     const so = window.__l24socket;
     if(so) so.emit('live_bet', {
@@ -1003,12 +1043,23 @@ h1,h2,h3{font-size:14px!important}
     },1000);
   }
 
+  
+  function settleLibraL7(winner){
+    try{
+      var payouts = { up:1.95, down:1.95, exact:12 };
+      var won = Number(myBets[winner])||0;
+      var winAmt = won>0 ? Math.floor(won * (payouts[winner]||1.95)) : 0;
+      if(winAmt>0) libraWallet(winAmt, 'win_'+winner);
+    }catch(e){}
+  }
+
   function finishLocal(winner){
     localBusy=true;
     try{
       // Card MUST match decision
       var card = (typeof genCard==='function') ? genCard(winner) : {rank:7,display:'7',suit:'♠',color:'black'};
       setRound({ result:winner, card:card, decided:true, phase:'result', timer:0 });
+      try{ settleLibraL7(winner); }catch(e){}
       // report to master
       try{
         var so=window.__l24socket;
