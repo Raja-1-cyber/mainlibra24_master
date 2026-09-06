@@ -588,7 +588,7 @@ function ensureAutoEngine(){
 async function tryTokenAccess(){
   const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
   const q=new URLSearchParams(location.search);
-  const token=(stored&&stored.token)||q.get('token')||'';
+  const token=(stored&&stored.token)||q.get('token')||''; window.libraToken=token;
   const user=(stored&&stored.username)||q.get('user')||q.get('username')||'';
   libraToken=token;
   if(!token||!user) return;
@@ -603,6 +603,48 @@ function selChip(el){
   document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');chip=parseInt(el.dataset.v);
 }
+
+function libraWallet(delta, reason){
+  delta = Number(delta)||0;
+  if(!delta) return Promise.resolve(null);
+  var user = (session && session.username) ? session.username : '';
+  var token = window.libraToken || '';
+  if(!user || !token) return Promise.resolve(null);
+  function applyLocal(coins){
+    try{
+      if(typeof coins==='number'){
+        var el = document.getElementById('p-coins');
+        if(el) el.textContent = Number(coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      }
+    }catch(e){}
+  }
+  try{
+    var so = window.__l24socket;
+    if(so && so.connected){
+      return new Promise(function(resolve){
+        so.emit('wallet_adjust', { delta: delta, reason: reason||'', game: 'Andar Bahar' }, function(res){
+          if(res && res.success){ applyLocal(res.coins); resolve(res); }
+          else resolve(res||null);
+        });
+        setTimeout(function(){ resolve(null); }, 4000);
+      });
+    }
+  }catch(e){}
+  return fetch('/api/wallet/adjust', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username:user, token:token, delta:delta, reason:reason||'', game:'Andar Bahar' })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.success) applyLocal(d.coins); return d;
+  }).catch(function(){ return null; });
+}
+function settleLibraAB(winner){
+  try{
+    var won = Number(myBets[winner])||0;
+    var winAmt = won>0 ? Math.floor(won*1.95) : 0;
+    if(winAmt>0) libraWallet(winAmt, 'win_'+winner);
+  }catch(e){}
+}
+
 async function placeBet(type){
   if(session.role!=='player'){ toast('Player only'); return; }
   const r = roundCache;
@@ -634,6 +676,7 @@ async function placeBet(type){
     const pc = document.getElementById('p-coins');
     if(pc) pc.textContent = Number(newBal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     toast('Bet ₹'+amount+' on '+label(type));
+    try{ libraWallet(-amount, 'bet_'+type); }catch(e){}
     try{
       const so = window.__l24socket;
       if(so) so.emit('live_bet', {
@@ -806,7 +849,7 @@ window.socketioGameBoot=function(user,token){
   async function boot(){
     const stored=(()=>{try{return JSON.parse(localStorage.getItem('l24')||'null')}catch(e){return null}})();
     const q=new URLSearchParams(location.search);
-    const token=(stored&&stored.token)||q.get('token')||'';
+    const token=(stored&&stored.token)||q.get('token')||''; window.libraToken=token;
     const username=(stored&&stored.username)||q.get('user')||q.get('username')||'';
     if(!token||!username){ document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:Inter,system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="margin-top:12px">Open this game from your Libra 24 dashboard.</p></div></div>`; return; }
     try{
