@@ -119,7 +119,7 @@ if (!users['master']) {
   };
   save(FILES.users, users);
 }
-// Always ensure all 4 games exist + active (fixes "not available" after redeploy)
+// Always ensure all 4 games exist + active
 const DEFAULT_GAMES = {
   dragon: { id: 'dragon', name: 'Dragon Tiger', image: '', url: '/games/dragon-tiger/index.html', active: true, order: 1 },
   teenpatti: { id: 'teenpatti', name: 'Teen Patti', image: '', url: '/games/teen-patti/index.html', active: true, order: 2 },
@@ -177,9 +177,42 @@ app.post('/api/game-access', (req, res) => {
     return res.status(401).json({ success: false, message: 'Invalid Libra 24 session' });
   }
   if (!g) return res.status(403).json({ success: false, message: 'Game is currently unavailable' });
-  // never block known games as inactive after redeploy
   g.active = true;
   res.json({ success: true, user: { username: u.username, role: u.role, coins: Number(u.coins || 0), parent: u.parent || null } });
+});
+
+
+app.post('/api/wallet/adjust', (req, res) => {
+  try {
+    const { username, token, delta, reason, game } = req.body || {};
+    const uname = String(username || '').trim().toLowerCase();
+    const u = users[uname];
+    if (!u || u.role !== 'player' || !u.isActive || !token || u.token !== token) {
+      return res.status(401).json({ success: false, message: 'Invalid session' });
+    }
+    const d = Number(delta) || 0;
+    if (!d) return res.json({ success: true, coins: Number(u.coins || 0) });
+    const before = Number(u.coins || 0);
+    const after = Math.max(0, before + d);
+    const actual = after - before;
+    u.coins = after;
+    pushRecord(transactions, FILES.transactions, {
+      id: uuidv4(), username: u.username, parent: u.parent || null,
+      actor: 'game', actorRole: 'system',
+      type: actual >= 0 ? 'credit' : 'debit',
+      amount: Math.abs(actual), delta: actual, before, after,
+      reason: String(reason || ''), game: String(game || ''),
+      time: new Date().toISOString()
+    });
+    save(FILES.users, users);
+    io.emit('balance_update', { username: u.username, coins: u.coins });
+    io.to('master').emit('users_updated', getSafeUsers());
+    if (u.parent) io.to('agent_' + u.parent).emit('users_updated', getSafeUsers());
+    res.json({ success: true, coins: u.coins, delta: actual });
+  } catch (e) {
+    console.error('wallet adjust', e);
+    res.status(500).json({ success: false, message: 'Wallet error' });
+  }
 });
 
 io.on('connection', (socket) => {
@@ -241,7 +274,7 @@ io.on('connection', (socket) => {
     socket.join(u.role);
     if (u.role === 'agent') socket.join('agent_' + username);
     if (u.role === 'player' && u.parent) socket.join('agent_' + u.parent);
-    cb && cb({ success: true, user: { username: u.username, role: u.role, coins: u.coins, sharePercent: u.sharePercent || 0, parent: u.parent } });
+    cb({ success: true, user: { username: u.username, role: u.role, coins: u.coins, sharePercent: u.sharePercent || 0, parent: u.parent } });
   });
 
   // ===== MASTER ACTIONS =====
@@ -400,7 +433,6 @@ io.on('connection', (socket) => {
     if (socket.role !== 'player') return cb({ success: false, message: 'Players only' });
     const u = users[socket.username];
     if (!games[gameId]) {
-      // auto-heal missing game entry
       const fallback = {
         dragon: { id: 'dragon', name: 'Dragon Tiger', url: '/games/dragon-tiger/index.html', active: true, order: 1 },
         teenpatti: { id: 'teenpatti', name: 'Teen Patti', url: '/games/teen-patti/index.html', active: true, order: 2 },
@@ -436,6 +468,37 @@ io.on('connection', (socket) => {
   });
 
   // Player/game reports a bet → aggregate side totals for master
+  
+  socket.on('wallet_adjust', ({ delta, reason, game }, cb) => {
+    try {
+      if (socket.role !== 'player' || !socket.username) return cb && cb({ success: false, message: 'Players only' });
+      const u = users[socket.username];
+      if (!u || !u.isActive) return cb && cb({ success: false, message: 'Invalid user' });
+      const d = Number(delta) || 0;
+      if (!d) return cb && cb({ success: true, coins: Number(u.coins || 0) });
+      const before = Number(u.coins || 0);
+      const after = Math.max(0, before + d);
+      const actual = after - before;
+      u.coins = after;
+      pushRecord(transactions, FILES.transactions, {
+        id: uuidv4(), username: u.username, parent: u.parent || null,
+        actor: 'game', actorRole: 'system',
+        type: actual >= 0 ? 'credit' : 'debit',
+        amount: Math.abs(actual), delta: actual, before, after,
+        reason: String(reason || ''), game: String(game || ''),
+        time: new Date().toISOString()
+      });
+      save(FILES.users, users);
+      io.emit('balance_update', { username: u.username, coins: u.coins });
+      io.to('master').emit('users_updated', getSafeUsers());
+      if (u.parent) io.to('agent_' + u.parent).emit('users_updated', getSafeUsers());
+      cb && cb({ success: true, coins: u.coins, delta: actual });
+    } catch (e) {
+      console.error(e);
+      cb && cb({ success: false, message: 'Wallet error' });
+    }
+  });
+
   socket.on('live_bet', (data) => {
     const gameId = data && data.gameId;
     let side = data && data.side;
@@ -488,7 +551,6 @@ io.on('connection', (socket) => {
       roundId: g.roundId
     };
     io.to('master').emit('live_bet', payload);
-    // fallback: any socket that self-identified as master
     io.emit('live_bet', payload);
   });
 
