@@ -375,114 +375,52 @@ body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,
 
   document.getElementById('playerName').innerText = (currentUser&&currentUser.username)||'Player';
 
-  function libraWallet(){ return Promise.resolve(null); }
-  let masterForcedWinner = null;
-  let libraSocket = null;
-  function logLiveBet(side, card, amount){
+  function libraWallet(delta, reason){
+  delta = Number(delta)||0;
+  if(!delta) return Promise.resolve(null);
+  var user = (typeof session!=='undefined' && session && session.username) ? session.username
+    : (typeof currentUser!=='undefined' && currentUser && currentUser.username) ? currentUser.username : '';
+  var token = (typeof window!=='undefined' && window.libraToken) ? window.libraToken
+    : (typeof libraToken!=='undefined' ? libraToken : '');
+  if(!user || !token){
+    // still update local UI coins if possible
+    return Promise.resolve(null);
+  }
+  function applyLocal(coins){
     try{
-      if(!libraSocket) return;
-      // map card bets to main side so master panel totals move
-      let mainSide = side;
-      if(side === 'DragonCard') mainSide = 'Dragon';
-      if(side === 'TigerCard') mainSide = 'Tiger';
-      libraSocket.emit('live_bet', {
-        gameId: 'dragon',
-        username: (currentUser && currentUser.username) || '',
-        side: mainSide,
-        amount: amount,
-        card: card || null,
-        roundId: currentRoundKey || lastRoundId || null
+      if(typeof coins==='number'){
+        if(typeof currentUser!=='undefined' && currentUser) currentUser.coins = coins;
+        if(typeof session!=='undefined' && session) session.coins = coins;
+        var el = document.getElementById('p-coins') || document.getElementById('coins') || document.getElementById('player-coins');
+        if(el) el.textContent = Number(coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(typeof window.coins==='number' || typeof coins!=='undefined'){
+          try{ if(typeof window.coins==='number') window.coins = coins; }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+  // Prefer socket
+  try{
+    var so = window.__l24socket || (typeof libraSocket!=='undefined' ? libraSocket : null);
+    if(so && so.connected){
+      return new Promise(function(resolve){
+        so.emit('wallet_adjust', { delta: delta, reason: reason||'', game: reason||'' }, function(res){
+          if(res && res.success){ applyLocal(res.coins); resolve(res); }
+          else resolve(res||null);
+        });
+        setTimeout(function(){ resolve(null); }, 4000);
       });
-    }catch(e){}
-  }
-  function reportRoundSync(phase, timer){
-    try{
-      if(!libraSocket) return;
-      libraSocket.emit('game_round_sync', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, phase, timer: timer||0 });
-    }catch(e){}
-  }
-
-async function loadMyCoins(){ coins=Number(currentUser&&currentUser.coins||0); }
-async function saveMyCoins(){ if(currentUser) currentUser.coins=coins; try{localStorage.setItem('dt_game_balance_'+currentUser.username,String(Math.floor(coins)))}catch(e){} updateUI(); }
-// ========== STATE ==========
-  let coins = 0;
-  let expo = 0;
-  let timer = 20;
-  let timerInterval = null;
-  let isBettingOpen = true;
-  let selectedChip = 100;
-  let betsLocked = false;
-  let currentRound = 1;
-  let history = [];
-  let lastResults = [];
-  try {
-    const savedH = localStorage.getItem('dt_player_history_' + (currentUser && currentUser.id));
-    if (savedH) history = JSON.parse(savedH);
-    const savedR = localStorage.getItem('dt_player_lastResults_' + (currentUser && currentUser.id));
-    if (savedR) lastResults = JSON.parse(savedR);
-  } catch(e) {}
-  let mainBets = { Dragon: 0, Tiger: 0, Tie: 0 };
-  let dragonCardBets = {};
-  let tigerCardBets = {};
-  let currentRoundKey = '';
-
-
-  const SUITS = ['♠','♥','♦','♣'];
-  const SUIT_COLOR = { '♠':'black', '♥':'red', '♦':'red', '♣':'black' };
-  const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-  const cardValues = {
-    'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,
-    '8':8,'9':9,'10':10,'J':11,'Q':12,'K':13
-  };
-  const allCards = [];
-  RANKS.forEach(r => SUITS.forEach(s => allCards.push(r + s)));
-
-  function rankOf(card) {
-    if (!card) return '';
-    const m = String(card).match(/^(10|[AJQK2-9])/);
-    return m ? m[1] : String(card);
-  }
-  function suitOf(card) {
-    if (!card) return '';
-    const m = String(card).match(/[♠♥♦♣]$/);
-    return m ? m[0] : '';
-  }
-  function cardHTML(card) {
-    if (!card) return '?';
-    const r = rankOf(card);
-    const s = suitOf(card) || '♠';
-    const color = SUIT_COLOR[s] || 'black';
-    return '<span class="suit-' + color + '"><span class="rank-line">' + r + '</span><br><span class="suit-line">' + s + '</span></span>';
-  }
-  function randomCard() {
-    return allCards[Math.floor(Math.random() * allCards.length)];
-  }
-  function randomCardOfRank(rank) {
-    if (!rank) return randomCard();
-    const pool = allCards.filter(c => rankOf(c) === rank);
-    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : randomCard();
-  }
-  function pickCardsForWinner(winner) {
-    if (winner === 'Tie') {
-      const r = RANKS[Math.floor(Math.random() * 13)];
-      return { dragon: randomCardOfRank(r), tiger: randomCardOfRank(r) };
     }
-    let dragon, tiger;
-    do {
-      dragon = randomCard();
-      tiger = randomCard();
-    } while (
-      winner === 'Dragon'
-        ? cardValues[rankOf(dragon)] <= cardValues[rankOf(tiger)]
-        : cardValues[rankOf(tiger)] <= cardValues[rankOf(dragon)]
-    );
-    return { dragon, tiger };
-  }
-
-
-  async function init(){
-  await loadMyCoins(); createCardGrids(); updateUI(); renderHistory(); renderLastResults();
-  startLocalRounds();
+  }catch(e){}
+  // HTTP fallback
+  return fetch('/api/wallet/adjust', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username:user, token:token, delta:delta, reason:reason||'', game:reason||'' })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.success) applyLocal(d.coins);
+    return d;
+  }).catch(function(e){ console.warn('wallet', e); return null; });
 }
 let localRoundTimer=null, localRevealTimer=null;
 function startLocalRounds(){
