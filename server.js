@@ -12,8 +12,11 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
-const DATA = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA)) fs.mkdirSync(DATA);
+// Persistent data dir: set DATA_DIR on Render (Persistent Disk mount e.g. /var/data)
+// Without it, free Render redeploys wipe local disk — we still never DELETE users on boot.
+const DATA = process.env.DATA_DIR || process.env.RENDER_DISK_PATH || path.join(__dirname, 'data');
+try { if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true }); } catch (e) { console.error('DATA mkdir', e); }
+console.log('[data] using', DATA);
 
 const FILES = {
   users: path.join(DATA, 'users.json'),
@@ -29,7 +32,16 @@ function load(file, def = {}) {
   return def;
 }
 function save(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  try {
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    console.error('save failed', file, e.message);
+    try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); } catch (e2) { console.error(e2); }
+  }
 }
 
 let users = load(FILES.users, {});
@@ -667,6 +679,17 @@ function getSafeUsers() {
   });
   return out;
 }
+
+
+// Autosave every 30s so coins/users survive short crashes
+setInterval(() => {
+  try {
+    save(FILES.users, users);
+    save(FILES.games, games);
+    save(FILES.settings, settings);
+    save(FILES.transactions, transactions);
+  } catch (e) { console.error('autosave', e); }
+}, 30000);
 
 server.listen(PORT, () => {
   console.log(`Libra 24 running on http://localhost:${PORT}`);
