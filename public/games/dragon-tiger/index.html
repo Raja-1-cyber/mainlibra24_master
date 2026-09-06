@@ -423,6 +423,22 @@ body{background:#050505!important;color:#f5f5f5!important}.top-bar,.game-header,
   }).catch(function(e){ console.warn('wallet', e); return null; });
 }
 let localRoundTimer=null, localRevealTimer=null;
+
+async function init(){
+  try{
+    if(typeof currentUser!=='undefined' && currentUser){
+      coins = Number(currentUser.coins||0);
+      try{ document.getElementById('playerName').innerText = currentUser.username||'Player'; }catch(e){}
+    }
+    try{ await loadMyCoins(); }catch(e){}
+    try{ createCardGrids(); }catch(e){}
+    try{ updateUI(); }catch(e){}
+    try{ renderHistory(); }catch(e){}
+    try{ renderLastResults(); }catch(e){}
+    try{ startLocalRounds(); }catch(e){ console.error('startLocalRounds', e); }
+  }catch(e){ console.error('init', e); }
+}
+
 function startLocalRounds(){
   if(localRoundTimer) clearInterval(localRoundTimer);
   runLocalRound();
@@ -738,8 +754,7 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     document.getElementById('netProfit').className = net>=0 ? 'win' : 'loss';
   }
 
-  // Start
-  init();
+  // Start after auth (boot script calls init)
 </script>
 <script src="/socket.io/socket.io.js"></script><script>
 (async function(){
@@ -747,7 +762,7 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
   const q=new URLSearchParams(location.search); const token=(stored&&stored.token)||q.get('token')||''; const username=(stored&&stored.username)||q.get('user')||q.get('username')||'';
   if(!token||!username){document.body.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p>Open Dragon Tiger from your Libra 24 dashboard.</p></div></div>';return;}
   try{const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:'dragon'})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'Access denied');
-    currentUser=d.user; libraToken=token; document.getElementById('playerName').innerText=d.user.username;
+    currentUser=d.user; libraToken=token; window.libraToken=token; document.getElementById('playerName').innerText=d.user.username;
     const so=io(); libraSocket=so;
     so.emit('auth',{username,token}, function(res){
       if(!res || !res.success){ console.warn('auth failed'); }
