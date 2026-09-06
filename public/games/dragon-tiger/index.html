@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="hi">
 <head>
   <meta charset="UTF-8">
@@ -440,7 +440,7 @@ async function init(){
 }
 
 
-function reportRoundSync(phase, timer){
+function reportRoundSync(phase, timer){ window.reportRoundSync = reportRoundSync;
   try{
     var so = (typeof libraSocket!=='undefined' && libraSocket) ? libraSocket : (window.__l24socket||null);
     if(!so) return;
@@ -461,10 +461,10 @@ function runLocalRound(){
   const rid='DT-'+Date.now().toString(36).toUpperCase(); currentRoundKey=rid; lastRoundId=rid; resetBetsForNewRound(rid);
   masterForcedWinner = null;
   resetCardFlips();
-  reportRoundSync('betting', 10);
+  try{ if(typeof reportRoundSync==='function') reportRoundSync('betting', 10); }catch(e){}
   try{ if(libraSocket) libraSocket.emit('game_round_sync', { gameId:'dragon', roundId: rid, phase:'betting', timer:10 }); }catch(e){}
   let left=10; isBettingOpen=true; betsLocked=false;
-  const tick=()=>{ document.getElementById('timer').innerText=left; if(left<=4){betsLocked=true;isBettingOpen=false;document.getElementById('status').innerText='Bets Locked'; reportRoundSync('locked', left);} else {document.getElementById('status').innerText='Betting Time'; reportRoundSync('betting', left);}
+  const tick=()=>{ document.getElementById('timer').innerText=left; if(left<=4){betsLocked=true;isBettingOpen=false;document.getElementById('status').innerText='Bets Locked'; try{ if(typeof reportRoundSync==='function') reportRoundSync('locked', left); }catch(e){}} else {document.getElementById('status').innerText='Betting Time'; try{ if(typeof reportRoundSync==='function') reportRoundSync('betting', left); }catch(e){}}
     if(left<=0){clearInterval(localRoundTimer);isBettingOpen=false;
       const forced = masterForcedWinner;
       const c = forced ? pickCardsForWinner(forced) : getFinalCardsLocal();
