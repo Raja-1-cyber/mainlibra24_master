@@ -1,6 +1,7 @@
 !DOCTYPE html>
 <html lang="hi">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>20-20 Dragon Tiger - LIBRA 24</title>
@@ -470,7 +471,7 @@ function runLocalRound(){
       const c = forced ? pickCardsForWinner(forced) : getFinalCardsLocal();
       setTimeout(()=>applyReveal(c.dragon,c.tiger, forced||null),300);
       // dragon open + 2s + result hold
-      setTimeout(runLocalRound, 5500); return;} left--; };
+      setTimeout(runLocalRound, 8000); return;} left--; };
   localRoundTimer=setInterval(tick,1000); tick();
 }
 function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; }
@@ -528,13 +529,12 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
 
     /* silent reveal */
 
-    // 1) Dragon opens first
+    // 1) Dragon opens after 1.5s
     setTimeout(() => {
       if(dF) dF.classList.add('flipped');
-      /* keep quiet while cards flip */
-    }, 250);
+    }, 1500);
 
-    // 2) Tiger opens after 2 seconds
+    // 2) Tiger opens 2.5s after Dragon (total 4s from reveal start)
     setTimeout(() => {
       if(tF) tF.classList.add('flipped');
 
