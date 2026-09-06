@@ -1,0 +1,10 @@
+# Railway config for Libra 24
+# Dashboard: add a Volume with mount path /data
+# Optional variable: DATA_DIR=/data (auto-detected if /data exists)
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "node server.js"
+restartPolicyType = "ON_FAILURE"
