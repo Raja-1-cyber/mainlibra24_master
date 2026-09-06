@@ -450,11 +450,51 @@ function doLogout(){
 const LIBRA_API=(function(){try{const q=new URLSearchParams(location.search);return q.get('api')||'https://libra24.onrender.com'}catch(e){return 'https://libra24.onrender.com'}})();
 let libraToken=null; let lastLibraSyncId=null;
 function libraWallet(delta, reason){
-  if(!session.username||!libraToken) return Promise.resolve();
-  return fetch('https://libra24.onrender.com/api/wallet/adjust',{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({username:session.username,token:libraToken,delta:Number(delta)||0,reason:reason||'',game:'Teen Patti'})
-  }).then(r=>r.json()).then(j=>{ console.log('Libra', j); return j; }).catch(e=>null);
+  delta = Number(delta)||0;
+  if(!delta) return Promise.resolve(null);
+  var user = (typeof session!=='undefined' && session && session.username) ? session.username
+    : (typeof currentUser!=='undefined' && currentUser && currentUser.username) ? currentUser.username : '';
+  var token = (typeof window!=='undefined' && window.libraToken) ? window.libraToken
+    : (typeof libraToken!=='undefined' ? libraToken : '');
+  if(!user || !token){
+    // still update local UI coins if possible
+    return Promise.resolve(null);
+  }
+  function applyLocal(coins){
+    try{
+      if(typeof coins==='number'){
+        if(typeof currentUser!=='undefined' && currentUser) currentUser.coins = coins;
+        if(typeof session!=='undefined' && session) session.coins = coins;
+        var el = document.getElementById('p-coins') || document.getElementById('coins') || document.getElementById('player-coins');
+        if(el) el.textContent = Number(coins).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(typeof window.coins==='number' || typeof coins!=='undefined'){
+          try{ if(typeof window.coins==='number') window.coins = coins; }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+  // Prefer socket
+  try{
+    var so = window.__l24socket || (typeof libraSocket!=='undefined' ? libraSocket : null);
+    if(so && so.connected){
+      return new Promise(function(resolve){
+        so.emit('wallet_adjust', { delta: delta, reason: reason||'', game: reason||'' }, function(res){
+          if(res && res.success){ applyLocal(res.coins); resolve(res); }
+          else resolve(res||null);
+        });
+        setTimeout(function(){ resolve(null); }, 4000);
+      });
+    }
+  }catch(e){}
+  // HTTP fallback
+  return fetch('/api/wallet/adjust', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username:user, token:token, delta:delta, reason:reason||'', game:reason||'' })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.success) applyLocal(d.coins);
+    return d;
+  }).catch(function(e){ console.warn('wallet', e); return null; });
 }
 
 
@@ -919,31 +959,41 @@ h1,h2,h3{font-size:14px!important}
       var ha=Array.isArray(hands&&hands.a)?hands.a:[];
       var hb=Array.isArray(hands&&hands.b)?hands.b:[];
       var shownA=['','',''], shownB=['','',''];
-      var step=0;
+      // Sequence: A1, B1, A2, B2, A3, B3 — 1.5s between each
+      var steps = [
+        function(){ if(ha[0]&&aEl){ shownA[0]=cardHtmlSafe(ha[0]); aEl.innerHTML=shownA.join(''); } },
+        function(){ if(hb[0]&&bEl){ shownB[0]=cardHtmlSafe(hb[0]); bEl.innerHTML=shownB.join(''); } },
+        function(){ if(ha[1]&&aEl){ shownA[1]=cardHtmlSafe(ha[1]); aEl.innerHTML=shownA.join(''); } },
+        function(){ if(hb[1]&&bEl){ shownB[1]=cardHtmlSafe(hb[1]); bEl.innerHTML=shownB.join(''); } },
+        function(){ if(ha[2]&&aEl){ shownA[2]=cardHtmlSafe(ha[2]); aEl.innerHTML=shownA.join(''); } },
+        function(){ if(hb[2]&&bEl){ shownB[2]=cardHtmlSafe(hb[2]); bEl.innerHTML=shownB.join(''); } }
+      ];
+      var i=0;
       function next(){
         try{
-          if(step<3){
-            if(ha[step] && aEl){ shownA[step]=cardHtmlSafe(ha[step]); aEl.innerHTML=shownA.join(''); }
-            step++;
-            setTimeout(next, 350);
+          if(i < steps.length){
+            steps[i]();
+            i++;
+            setTimeout(next, 1500);
             return;
           }
-          if(step<6){
-            var i=step-3;
-            if(hb[i] && bEl){ shownB[i]=cardHtmlSafe(hb[i]); bEl.innerHTML=shownB.join(''); }
-            step++;
-            setTimeout(next, 350);
-            return;
-          }
-          // labels
           var haEl=document.getElementById('p-hand-a'); if(haEl) haEl.textContent=(hands&&hands.handA)||'';
           var hbEl=document.getElementById('p-hand-b'); if(hbEl) hbEl.textContent=(hands&&hands.handB)||'';
           animBusy=false;
           resolve();
         }catch(e){ console.error(e); animBusy=false; resolve(); }
       }
-      setTimeout(next, 200);
+      setTimeout(next, 300);
     });
+  }
+
+  
+  function settleLibraTP(winner){
+    try{
+      var won = Number(myBets[winner])||0;
+      var winAmt = won>0 ? Math.floor(won*1.95) : 0;
+      if(winAmt>0) libraWallet(winAmt, 'win_'+winner);
+    }catch(e){}
   }
 
   async function finishLocal(winner){
@@ -957,12 +1007,13 @@ h1,h2,h3{font-size:14px!important}
       setRound({ result:null, hands:null, decided:true, phase:'dealing', timer:0 });
       await animateHands(hands);
       setRound({ result:winner, hands:hands, decided:true, phase:'result', timer:0 });
+      try{ settleLibraTP(winner); }catch(e){}
       try{
         var so=window.__l24socket;
         if(so) so.emit('game_result_report',{gameId:'teenpatti', roundId:localRoundId, winner: winner==='a'?'A':'B'});
       }catch(e){}
       localBusy=false;
-      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 4500);
+      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 3000);
     }catch(e){
       console.error('TP finish',e);
       localBusy=false; animBusy=false;
