@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Andar Bahar - LIBRA 24</title>
@@ -864,214 +865,145 @@ h1,h2,h3{font-size:14px!important}
 
 
 
-<script>
-/* LIBRA AB LOCAL ENGINE v4 — stable single loop */
-(function(){
-  if(window.__abV4) return; window.__abV4 = true;
-  var timer=null, busy=false, rid=null;
 
-  function setR(p){ roundCache=Object.assign({},roundCache||{},p); try{onRoundUpdate();}catch(e){} }
-  function stop(){ if(timer){clearInterval(timer);timer=null;} try{if(engineTimer){clearInterval(engineTimer);engineTimer=null}}catch(e){} try{if(nextRoundTimer){clearTimeout(nextRoundTimer);nextRoundTimer=null}}catch(e){} }
 
-  function settle(w){
-    try{
-      var won=Number(myBets[w])||0; var win=won>0?Math.floor(won*1.95):0;
-      if(win>0 && typeof libraWallet==='function') libraWallet(win,'win_'+w);
-    }catch(e){}
-  }
 
-  window.__localStartRound = function(){
-    if(busy) return;
-    stop();
-    rid='AB-'+Date.now().toString(36).toUpperCase();
-    try{ myBets={andar:0,bahar:0}; myExpo=0;
-      ['andar','bahar'].forEach(function(k){ var a=document.getElementById('amt-'+k); if(a)a.textContent='0'; var b=document.getElementById('bet-'+k); if(b)b.classList.remove('selected'); });
-      var ex=document.getElementById('p-expo'); if(ex)ex.textContent='0';
-    }catch(e){}
-    var joker=(typeof randCard==='function')?randCard():null;
-    setR({id:rid,phase:'betting',timer:10,result:null,deal:null,joker:joker,jokerShown:false,decided:false,pendingResult:null,bets:{}});
-    try{ var so=window.__l24socket; if(so) so.emit('game_round_sync',{gameId:'andarbahar',roundId:rid,phase:'betting',timer:10}); }catch(e){}
-    tick();
-  };
 
-  function tick(){
-    stop();
-    timer=setInterval(function(){
-      try{
-        var r=roundCache||{};
-        if(r.phase!=='betting'&&r.phase!=='locked'){ stop(); return; }
-        var t=Math.max(0,(Number(r.timer)||0)-1), ph=r.phase;
-        if(t===4&&ph==='betting') ph='locked';
-        if(t===8&&!r.jokerShown){ setR({timer:t,phase:ph,jokerShown:true}); return; }
-        if(t<=0){
-          stop();
-          setR({timer:0,phase:'waiting'});
-          var w=null;
-          if(typeof masterForcedWinner!=='undefined'&&masterForcedWinner){ w=masterForcedWinner; masterForcedWinner=null; }
-          else if(typeof smartAuto==='function'){ try{w=smartAuto(r);}catch(e){} }
-          if(w!=='andar'&&w!=='bahar') w=Math.random()<0.5?'andar':'bahar';
-          end(w);
-          return;
-        }
-        setR({timer:t,phase:ph});
-      }catch(e){ console.error(e); }
-    },1000);
-  }
-
-  function end(w){
-    if(busy) return; busy=true;
-    try{
-      var deal=(typeof buildDeal==='function')?buildDeal(w,(roundCache&&roundCache.joker)||null):{joker:null,andar:[],bahar:[],winner:w};
-      setR({result:w,deal:deal,decided:true,phase:'dealing',timer:0});
-      try{settle(w);}catch(e){}
-      try{ var so=window.__l24socket; if(so){ so.emit('game_result_report',{gameId:'andarbahar',roundId:rid,winner:w==='andar'?'Andar':'Bahar'}); } }catch(e){}
-      setTimeout(function(){
-        setR({phase:'result',result:w,deal:deal,decided:true});
-        busy=false;
-        setTimeout(function(){ window.__localStartRound(); }, 4000);
-      }, 3000);
-    }catch(e){ console.error(e); busy=false; setTimeout(function(){ window.__localStartRound(); }, 3000); }
-  }
-
-  window.__ensureLocal = function(){
-    if(busy) return;
-    var r=roundCache||{}, ph=r.phase||'idle';
-    if(!timer && (ph==='idle'||ph==='result'||!ph)) window.__localStartRound();
-    else if((ph==='betting'||ph==='locked')&&!timer) tick();
-  };
-
-  // kill firebase round listener after boot
-  setTimeout(function(){
-    try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').off(); }catch(e){}
-    window.__localStartRound();
-  }, 1500);
-
-  // soft recovery only if truly stuck 20s+
-  setInterval(function(){
-    if(busy||timer) return;
-    var r=roundCache||{};
-    if(!r.phase||r.phase==='idle'||r.phase==='result') window.__localStartRound();
-  }, 20000);
-})();
-</script>
 
 
 <script>
-/* ===== LIBRA LOCAL ENGINE v4 (Andar Bahar) ===== */
+/* ===== LIBRA AB ENGINE v5 — single stable loop ===== */
 (function(){
   if(window.__abV4) return;
   window.__abV4 = true;
-  var localTimer=null, localBusy=false, rid=null;
+
+  var localTimer = null;
+  var localBusy = false;
+  var rid = null;
 
   function setR(p){
-    roundCache = Object.assign({}, roundCache||{}, p);
-    try{ onRoundUpdate(); }catch(e){}
+    try{
+      roundCache = Object.assign({}, roundCache || {}, p);
+      if(typeof onRoundUpdate === 'function') onRoundUpdate();
+    }catch(e){ console.warn(e); }
   }
-  function stop(){
-    if(localTimer){ clearInterval(localTimer); localTimer=null; }
-    try{ if(typeof engineTimer!=='undefined' && engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
-    try{ if(typeof nextRoundTimer!=='undefined' && nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
+
+  function stopAll(){
+    if(localTimer){ clearInterval(localTimer); localTimer = null; }
+    try{ if(typeof engineTimer !== 'undefined' && engineTimer){ clearInterval(engineTimer); engineTimer = null; } }catch(e){}
+    try{ if(typeof nextRoundTimer !== 'undefined' && nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer = null; } }catch(e){}
   }
 
   function settle(w){
     try{
-      var won = Number(myBets && myBets[w])||0;
-      var winAmt = won>0 ? Math.floor(won*1.95) : 0;
-      if(winAmt>0 && typeof libraWallet==='function') libraWallet(winAmt, 'win_'+w);
+      var won = Number(myBets && myBets[w]) || 0;
+      var winAmt = won > 0 ? Math.floor(won * 1.95) : 0;
+      if(winAmt > 0 && typeof libraWallet === 'function') libraWallet(winAmt, 'win_' + w);
     }catch(e){}
   }
 
   window.__localStartRound = function(){
-    if(busy) return;
-    stop();
-    rid = 'AB-'+Date.now().toString(36).toUpperCase();
+    if(localBusy) return;
+    stopAll();
+    rid = 'AB-' + Date.now().toString(36).toUpperCase();
     try{
-      myBets={andar:0,bahar:0}; myExpo=0;
+      myBets = { andar: 0, bahar: 0 };
+      myExpo = 0;
       ['andar','bahar'].forEach(function(k){
-        var a=document.getElementById('amt-'+k); if(a) a.textContent='0';
-        var b=document.getElementById('bet-'+k); if(b) b.classList.remove('selected');
+        var a = document.getElementById('amt-' + k); if(a) a.textContent = '0';
+        var b = document.getElementById('bet-' + k); if(b) b.classList.remove('selected');
       });
-      var ex=document.getElementById('p-expo'); if(ex) ex.textContent='0';
+      var ex = document.getElementById('p-expo'); if(ex) ex.textContent = '0';
     }catch(e){}
-    var joker = (typeof randCard==='function') ? randCard() : null;
+    var joker = (typeof randCard === 'function') ? randCard() : null;
     setR({
-      id:rid, phase:'betting', timer:10,
-      result:null, deal:null, joker:joker, jokerShown:false,
-      decided:false, pendingResult:null, bets:{}
+      id: rid, phase: 'betting', timer: 10,
+      result: null, deal: null, joker: joker, jokerShown: false,
+      decided: false, pendingResult: null, bets: {}
     });
     try{
-      var so=window.__l24socket;
-      if(so) so.emit('game_round_sync',{gameId:'andarbahar',roundId:rid,phase:'betting',timer:10});
+      var so = window.__l24socket;
+      if(so) so.emit('game_round_sync', { gameId: 'andarbahar', roundId: rid, phase: 'betting', timer: 10 });
     }catch(e){}
     startTick();
   };
 
   function startTick(){
-    stop();
-    timer=setInterval(function(){
+    stopAll();
+    localTimer = setInterval(function(){
       try{
-        var r=roundCache||{};
-        if(r.phase!=='betting'&&r.phase!=='locked'){ stop(); return; }
-        var t=Math.max(0,(Number(r.timer)||0)-1), ph=r.phase;
-        if(t===4 && ph==='betting') ph='locked';
-        if(t===8 && !r.jokerShown){ setR({timer:t, phase:ph, jokerShown:true}); return; }
-        if(t<=0){
-          stop();
-          setR({timer:0, phase:'waiting'});
-          var w=null;
-          if(typeof masterForcedWinner!=='undefined' && masterForcedWinner){
-            w=masterForcedWinner; masterForcedWinner=null;
-          } else if(typeof smartAuto==='function'){
-            try{ w=smartAuto(r); }catch(e){}
+        var r = roundCache || {};
+        if(r.phase !== 'betting' && r.phase !== 'locked'){ stopAll(); return; }
+        var t = Math.max(0, (Number(r.timer) || 0) - 1);
+        var ph = r.phase;
+        if(t === 4 && ph === 'betting') ph = 'locked';
+        if(t === 8 && !r.jokerShown){ setR({ timer: t, phase: ph, jokerShown: true }); return; }
+        if(t <= 0){
+          stopAll();
+          setR({ timer: 0, phase: 'waiting' });
+          var w = null;
+          if(typeof masterForcedWinner !== 'undefined' && masterForcedWinner){
+            w = masterForcedWinner;
+            masterForcedWinner = null;
+          } else if(typeof smartAuto === 'function'){
+            try{ w = smartAuto(r); }catch(e){}
           }
-          if(w!=='andar'&&w!=='bahar') w=Math.random()<0.5?'andar':'bahar';
-          end(w);
+          if(w !== 'andar' && w !== 'bahar') w = Math.random() < 0.5 ? 'andar' : 'bahar';
+          finish(w);
           return;
         }
-        setR({timer:t, phase:ph});
+        setR({ timer: t, phase: ph });
       }catch(e){ console.error('AB tick', e); }
-    },1000);
+    }, 1000);
   }
 
-  function end(w){
-    if(busy) return;
-    busy=true;
+  function finish(w){
+    if(localBusy) return;
+    localBusy = true;
     try{
-      var deal=(typeof buildDeal==='function')?buildDeal(w,(roundCache&&roundCache.joker)||null):{joker:null,andar:[],bahar:[],winner:w};
-      setR({result:w, deal:deal, decided:true, phase:'dealing', timer:0});
+      var deal = (typeof buildDeal === 'function')
+        ? buildDeal(w, (roundCache && roundCache.joker) || null)
+        : { joker: null, andar: [], bahar: [], winner: w };
+      setR({ result: w, deal: deal, decided: true, phase: 'dealing', timer: 0 });
       try{ settle(w); }catch(e){}
       try{
-        var so=window.__l24socket;
-        if(so) so.emit('game_result_report',{gameId:'andarbahar', roundId:rid, winner: w==='andar'?'Andar':'Bahar'});
+        var so = window.__l24socket;
+        if(so) so.emit('game_result_report', {
+          gameId: 'andarbahar', roundId: rid,
+          winner: w === 'andar' ? 'Andar' : 'Bahar'
+        });
       }catch(e){}
       setTimeout(function(){
-        setR({phase:'result', result:w, deal:deal, decided:true});
-        busy=false;
+        setR({ phase: 'result', result: w, deal: deal, decided: true });
+        localBusy = false;
         setTimeout(function(){ try{ window.__localStartRound(); }catch(e){} }, 4000);
       }, 3000);
     }catch(e){
       console.error(e);
-      busy=false;
+      localBusy = false;
       setTimeout(function(){ try{ window.__localStartRound(); }catch(e){} }, 3000);
     }
   }
 
   window.__ensureLocal = function(){
-    if(busy) return;
-    var r=roundCache||{}, ph=r.phase||'idle';
-    if(!timer && (ph==='idle'||ph==='result'||!ph)) window.__localStartRound();
-    else if((ph==='betting'||ph==='locked') && !timer) tick();
+    if(localBusy) return;
+    var r = roundCache || {};
+    var ph = r.phase || 'idle';
+    if(!localTimer && (ph === 'idle' || ph === 'result' || !ph)) window.__localStartRound();
+    else if((ph === 'betting' || ph === 'locked') && !localTimer) startTick();
   };
 
   setTimeout(function(){
-    try{ if(typeof fdb!=='undefined' && typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').off(); }catch(e){}
+    try{
+      if(typeof fdb !== 'undefined' && typeof ROOT !== 'undefined') fdb.ref(ROOT + '/round').off();
+    }catch(e){}
     window.__localStartRound();
   }, 1500);
 
   setInterval(function(){
-    if(busy || timer) return;
-    var r=roundCache||{};
-    if(!r.phase || r.phase==='idle' || r.phase==='result') window.__localStartRound();
+    if(localBusy || localTimer) return;
+    var r = roundCache || {};
+    if(!r.phase || r.phase === 'idle' || r.phase === 'result') window.__localStartRound();
   }, 20000);
 })();
 </script>
