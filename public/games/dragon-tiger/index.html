@@ -441,6 +441,29 @@ async function init(){
 }
 
 
+
+/* === Card utils (required for reveal/decision) === */
+var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+var allCards = RANKS.slice();
+var cardValues = {A:14,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
+function rankOf(c){
+  if(c==null) return 'A';
+  if(typeof c==='string') return c;
+  if(typeof c==='object') return c.rank || c.r || c.display || 'A';
+  return String(c);
+}
+function randomCard(){
+  return RANKS[Math.floor(Math.random()*RANKS.length)];
+}
+function cardHTML(c){
+  var rank = rankOf(c);
+  var suits = ['♠','♥','♦','♣'];
+  var suit = (typeof c==='object' && (c.suit||c.s)) ? (c.suit||c.s) : suits[Math.floor(Math.random()*4)];
+  var red = (suit==='♥'||suit==='♦');
+  return '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:8px;color:'+(red?'#dc2626':'#0f172a')+';font-weight:800;font-size:22px;line-height:1.1">'
+    +'<div>'+rank+'</div><div style="font-size:18px">'+suit+'</div></div>';
+}
+
 function reportRoundSync(phase, timer){ window.reportRoundSync = reportRoundSync;
   try{
     var so = (typeof libraSocket!=='undefined' && libraSocket) ? libraSocket : (window.__l24socket||null);
@@ -517,81 +540,90 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
   }
 
   function applyReveal(dragon, tiger, winnerFromServer) {
-    const dEl = document.getElementById('dragonCard');
-    const tEl = document.getElementById('tigerCard');
-    const dF = document.getElementById('dragonFlip');
-    const tF = document.getElementById('tigerFlip');
+    try {
+      var dEl = document.getElementById('dragonCard');
+      var tEl = document.getElementById('tigerCard');
+      var dF = document.getElementById('dragonFlip');
+      var tF = document.getElementById('tigerFlip');
+      var st = document.getElementById('status');
+      if(!dEl || !tEl){ console.error('card els missing'); return; }
 
-    // prepare faces, still face-down
-    dEl.innerHTML = cardHTML(dragon);
-    tEl.innerHTML = cardHTML(tiger);
-    if(dF) dF.classList.remove('flipped');
-    if(tF) tF.classList.remove('flipped');
+      dEl.innerHTML = cardHTML(dragon);
+      tEl.innerHTML = cardHTML(tiger);
+      if(dF) dF.classList.remove('flipped');
+      if(tF) tF.classList.remove('flipped');
+      if(st) st.innerText = 'Revealing...';
 
-    /* silent reveal */
+      // 1.5s Dragon open
+      setTimeout(function(){
+        if(dF) dF.classList.add('flipped');
+        if(st) st.innerText = 'Dragon Open';
+      }, 1500);
 
-    // 1) Dragon opens after 1.5s
-    setTimeout(() => {
-      if(dF) dF.classList.add('flipped');
-    }, 1500);
+      // +2.5s Tiger open + decision
+      setTimeout(function(){
+        if(tF) tF.classList.add('flipped');
 
-    // 2) Tiger opens 2.5s after Dragon (total 4s from reveal start)
-    setTimeout(() => {
-      if(tF) tF.classList.add('flipped');
+        var winner = winnerFromServer;
+        if(winner === 'A') winner = 'Dragon';
+        if(winner === 'B') winner = 'Tiger';
+        if(!winner){
+          var dv = cardValues[rankOf(dragon)] || 0;
+          var tv = cardValues[rankOf(tiger)] || 0;
+          if(dv > tv) winner = 'Dragon';
+          else if(tv > dv) winner = 'Tiger';
+          else winner = 'Tie';
+        }
 
-      let winner = winnerFromServer;
-      if (!winner) {
-        if (cardValues[rankOf(dragon)] > cardValues[rankOf(tiger)]) winner = 'Dragon';
-        else if (cardValues[rankOf(tiger)] > cardValues[rankOf(dragon)]) winner = 'Tiger';
-        else winner = 'Tie';
-      }
+        var totalWin = 0;
+        try {
+          if(mainBets[winner] > 0){
+            var profit = (winner === 'Tie') ? mainBets[winner] * 45 : mainBets[winner] * 0.95;
+            totalWin += mainBets[winner] + profit;
+          }
+          var dRank = rankOf(dragon), tRank = rankOf(tiger);
+          if(winner === 'Dragon' && dragonCardBets[dRank]) totalWin += dragonCardBets[dRank] + dragonCardBets[dRank]*11;
+          if(winner === 'Tiger' && tigerCardBets[tRank]) totalWin += tigerCardBets[tRank] + tigerCardBets[tRank]*11;
+        }catch(e){}
 
-      let totalWin = 0;
-      if (mainBets[winner] > 0) {
-        const profit = (winner === 'Tie') ? mainBets[winner] * 45 : mainBets[winner] * 0.95;
-        totalWin += mainBets[winner] + profit;
-      }
-      const dRank = rankOf(dragon);
-      const tRank = rankOf(tiger);
-      if (winner === 'Dragon' && dragonCardBets[dRank]) {
-        totalWin += dragonCardBets[dRank] + dragonCardBets[dRank] * 11;
-      }
-      if (winner === 'Tiger' && tigerCardBets[tRank]) {
-        totalWin += tigerCardBets[tRank] + tigerCardBets[tRank] * 11;
-      }
+        try {
+          coins = Number(coins||0) + totalWin;
+          if(totalWin>0 && typeof libraWallet==='function') libraWallet(totalWin, 'win_'+winner);
+          if(typeof saveMyCoins==='function') saveMyCoins();
+        }catch(e){}
 
-      coins += totalWin;
-      if(totalWin>0){ libraWallet(totalWin, 'win_'+String(winner||'')); }
-      saveMyCoins();
+        var totalBetAmount = 0;
+        try {
+          totalBetAmount = (mainBets.Dragon||0)+(mainBets.Tiger||0)+(mainBets.Tie||0)
+            + Object.values(dragonCardBets||{}).reduce(function(a,b){return a+b;},0)
+            + Object.values(tigerCardBets||{}).reduce(function(a,b){return a+b;},0);
+        }catch(e){}
+        var netThisRound = totalWin - totalBetAmount;
 
-      const totalBetAmount = mainBets.Dragon + mainBets.Tiger + mainBets.Tie +
-        Object.values(dragonCardBets).reduce((a,b)=>a+b,0) +
-        Object.values(tigerCardBets).reduce((a,b)=>a+b,0);
-      const netThisRound = totalWin - totalBetAmount;
+        try {
+          history.unshift({
+            round: currentRound, dragon: rankOf(dragon), tiger: rankOf(tiger), winner: winner,
+            betSummary: 'D:'+(mainBets.Dragon||0)+' T:'+(mainBets.Tiger||0)+' Tie:'+(mainBets.Tie||0),
+            amount: (mainBets.Dragon||0)+(mainBets.Tiger||0)+(mainBets.Tie||0),
+            pl: netThisRound, balance: coins
+          });
+          lastResults.unshift(winner==='Dragon'?'D':(winner==='Tiger'?'T':'Tie'));
+          if(lastResults.length>12) lastResults.pop();
+          currentRound++;
+          expo = 0;
+        }catch(e){}
 
-      history.unshift({
-        round: currentRound,
-        dragon, tiger, winner,
-        betSummary: `D:${mainBets.Dragon} T:${mainBets.Tiger} Tie:${mainBets.Tie}`,
-        amount: mainBets.Dragon + mainBets.Tiger + mainBets.Tie,
-        pl: netThisRound,
-        balance: coins
-      });
-      lastResults.unshift(winner === 'Dragon' ? 'D' : (winner === 'Tiger' ? 'T' : 'Tie'));
-      if (lastResults.length > 12) lastResults.pop();
-      currentRound++;
-      expo = 0;
-
-      document.getElementById('status').innerHTML =
-        `<b style="color:#fbbf24">${winner} Wins!</b> | P/L: <span class="${netThisRound>=0?'win':'loss'}">${netThisRound>=0?'+':''}${netThisRound}</span>`;
-
-      try{ if(libraSocket) libraSocket.emit('game_result_report', { gameId:'dragon', roundId: currentRoundKey||lastRoundId, winner }); }catch(e){}
-      masterForcedWinner = null;
-      renderHistory();
-      renderLastResults();
-      updateUI();
-    }, 2250);
+        if(st){
+          st.innerHTML = '<b style="color:#fbbf24;font-size:16px">'+winner+' Wins!</b> &nbsp; P/L: <span class="'+(netThisRound>=0?'win':'loss')+'">'+(netThisRound>=0?'+':'')+netThisRound+'</span>';
+        }
+        try{ if(typeof renderLastResults==='function') renderLastResults(); }catch(e){}
+        try{ if(typeof renderHistory==='function') renderHistory(); }catch(e){}
+        try{ if(typeof updateUI==='function') updateUI(); }catch(e){}
+        try{ if(libraSocket) libraSocket.emit('game_result_report',{gameId:'dragon',roundId:currentRoundKey||lastRoundId,winner:winner}); }catch(e){}
+      }, 4000);
+    }catch(e){ console.error('applyReveal', e); try{ var s=document.getElementById('status'); if(s) s.innerText='Result error'; }catch(_e){} }
   }
+
 
   function toggleTheme(){
     const bw = document.body.classList.toggle('theme-bw');
