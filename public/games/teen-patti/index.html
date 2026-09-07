@@ -507,7 +507,7 @@ function libraWallet(delta, reason){
 
 
 function stopEngine(){if(engineTimer){clearInterval(engineTimer);engineTimer=null}if(nextRoundTimer){clearTimeout(nextRoundTimer);nextRoundTimer=null}}
-async function autoStartRound(){
+async function autoStartRound(){ if(window.__tpV2){ return window.__tpStart && window.__tpStart(); }
   const r=roundCache||{};
   if(['betting','locked','waiting','dealing'].includes(r.phase)){toast('Round running');return}
   stopEngine();
@@ -515,7 +515,7 @@ async function autoStartRound(){
   await fdb.ref(ROOT+'/round').set({id:rid,phase:'betting',timer:BET_WINDOW,result:null,hands:null,decided:false,pendingResult:null,bets:{}});
   startEngineTick();toast('Round started');
 }
-function startEngineTick(){
+function startEngineTick(){ if(window.__tpV2) return;
   if(engineTimer)clearInterval(engineTimer);
   engineTimer=setInterval(async()=>{
     
@@ -587,7 +587,7 @@ async function applyDecision(result,isAuto){
     }catch(_e){}
   }
 }
-function ensureAutoEngine(){
+function ensureAutoEngine(){ if(window.__tpV2){ return window.__tpEnsure && window.__tpEnsure(); }
   if(!settingsCache.autoRounds)return;
   const r=roundCache||{};
   if(r.phase==='idle'||r.phase==='result'){
@@ -847,204 +847,184 @@ h1,h2,h3{font-size:14px!important}
 
 
 
+
+
+
 <script>
-/* ===== LIBRA LOCAL ENGINE v2 (Teen Patti) — sequential cards, no crash ===== */
+/* ===== TEEN PATTI LOCAL ENGINE v2 — 15s + exact card sequence ===== */
 (function(){
-  if(window.__libraLocalV2) return;
-  window.__libraLocalV2 = true;
-  window.__localOwnsRound = true;
+  if(window.__tpV2) return; window.__tpV2 = true;
+  var localTimer=null, busy=false, rid=null, animBusy=false;
 
-  var localTimer=null, localBusy=false, animBusy=false, localRoundId=null;
-
-  window.__setForce = function(w){
-    if(!w){ window.masterForcedWinner=null; return; }
-    var s=String(w).toLowerCase();
-    if(s==='a'||s==='player a'||s==='teama') window.masterForcedWinner='a';
-    else if(s==='b'||s==='player b'||s==='teamb') window.masterForcedWinner='b';
-    else window.masterForcedWinner=s;
-    console.log('[TP] force set', window.masterForcedWinner);
-  };
-
-  function setRound(partial){
-    roundCache = Object.assign({}, roundCache||{}, partial);
-    try{ onRoundUpdate(); }catch(e){ console.warn(e); }
+  function setR(p){
+    try{ roundCache=Object.assign({},roundCache||{},p); if(typeof onRoundUpdate==='function') onRoundUpdate(); }catch(e){}
   }
-  function stopLocal(){ if(localTimer){ clearInterval(localTimer); localTimer=null; } }
-
-  window.stopEngine = function(){
-    stopLocal();
+  function stop(){
+    if(localTimer){ clearInterval(localTimer); localTimer=null; }
     try{ if(typeof engineTimer!=='undefined'&&engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
     try{ if(typeof nextRoundTimer!=='undefined'&&nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
-  };
-
-  var _origBoot = window.socketioGameBoot;
-  window.socketioGameBoot = function(user, token){
-    try{ if(_origBoot) _origBoot(user, token); }catch(e){}
-    try{
-      var so = window.__l24socket || (window.__l24socket = io());
-      so.on('master_force_result', function(d){
-        if(d && d.gameId==='teenpatti') window.__setForce(d.winner);
-      });
-      so.on('live_game_update', function(g){
-        if(g && g.id==='teenpatti' && g.forcedWinner) window.__setForce(g.forcedWinner);
-      });
-    }catch(e){}
-  };
+  }
 
   function clearBoard(){
     try{
-      var a=document.getElementById('p-cards-a'); if(a) a.innerHTML='';
-      var b=document.getElementById('p-cards-b'); if(b) b.innerHTML='';
-      var ha=document.getElementById('p-hand-a'); if(ha) ha.textContent='';
-      var hb=document.getElementById('p-hand-b'); if(hb) hb.textContent='';
-      var rl=document.getElementById('p-result-line'); if(rl) rl.textContent='';
+      ['p-cards-a','p-cards-b'].forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML=''; });
+      ['p-hand-a','p-hand-b','p-result-line'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=''; });
     }catch(e){}
   }
 
-  window.autoStartRound = async function(){
-    if(localBusy||animBusy) return;
-    window.stopEngine();
-    localRoundId = 'TP-'+Date.now().toString(36).toUpperCase();
+  function cardEl(c){
+    if(typeof cardHtml==='function') return cardHtml(c);
+    if(typeof miniCard==='function') return miniCard(c);
+    var r=(c&&c.r)||'?', s=(c&&c.s)||'';
+    return '<div class="mini-card">'+r+s+'</div>';
+  }
+
+  function appendCard(side, c){
+    var id = side==='a' ? 'p-cards-a' : 'p-cards-b';
+    var el=document.getElementById(id);
+    if(!el) return;
+    var wrap=document.createElement('div');
+    wrap.innerHTML=cardEl(c);
+    el.appendChild(wrap.firstChild||wrap);
+  }
+
+  // Sequence: A1 (1.5s from start) then each next after 2.5s: B1,A2,B2,A3,B3 then 3s new round
+  function animateSeq(hands, winner, done){
+    animBusy=true;
     clearBoard();
-    setRound({
-      id: localRoundId, phase:'betting', timer:10,
-      result:null, hands:null, decided:false, pendingResult:null, bets:{}
+    var steps=[
+      {t:1500, side:'a', i:0},
+      {t:1500+2500, side:'b', i:0},
+      {t:1500+5000, side:'a', i:1},
+      {t:1500+7500, side:'b', i:1},
+      {t:1500+10000, side:'a', i:2},
+      {t:1500+12500, side:'b', i:2}
+    ];
+    steps.forEach(function(st){
+      setTimeout(function(){
+        try{
+          var arr = hands[st.side]||[];
+          if(arr[st.i]) appendCard(st.side, arr[st.i]);
+        }catch(e){}
+      }, st.t);
     });
-    try{ if(typeof myBets!=='undefined'){ myBets={a:0,b:0}; myExpo=0;
-      var aa=document.getElementById('amt-a'); if(aa) aa.textContent='0';
-      var ab=document.getElementById('amt-b'); if(ab) ab.textContent='0';
-      var ba=document.getElementById('bet-a'); if(ba) ba.classList.remove('selected');
-      var bb=document.getElementById('bet-b'); if(bb) bb.classList.remove('selected');
+    setTimeout(function(){
+      try{
+        var ha=document.getElementById('p-hand-a'); if(ha) ha.textContent=(hands.handA||'');
+        var hb=document.getElementById('p-hand-b'); if(hb) hb.textContent=(hands.handB||'');
+        var rl=document.getElementById('p-result-line');
+        if(rl) rl.textContent = (winner==='a'?'Team A':'Team B') + ' Wins';
+      }catch(e){}
+      animBusy=false;
+      if(done) done();
+    }, 1500+12500+400);
+  }
+
+  function settle(w){
+    try{
+      var key = (w==='a'||w==='A')?'a':'b';
+      var won = Number(myBets && myBets[key])||0;
+      var winAmt = won>0 ? Math.floor(won*1.95) : 0;
+      if(winAmt>0 && typeof libraWallet==='function') libraWallet(winAmt, 'win_tp_'+key);
+    }catch(e){}
+  }
+
+  function buildHandsSafe(winner){
+    if(typeof buildHands==='function'){
+      try{ return buildHands(winner); }catch(e){}
+    }
+    // fallback random 3+3
+    function rc(){ var ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K']; var suits=['♠','♥','♦','♣']; return {r:ranks[Math.floor(Math.random()*13)], s:suits[Math.floor(Math.random()*4)]}; }
+    return {a:[rc(),rc(),rc()], b:[rc(),rc(),rc()], handA:'', handB:''};
+  }
+
+  window.__tpStart = function(){
+    if(busy||animBusy) return;
+    stop();
+    rid='TP-'+Date.now().toString(36).toUpperCase();
+    clearBoard();
+    try{
+      myBets={a:0,b:0}; myExpo=0;
+      ['a','b'].forEach(function(k){
+        var a=document.getElementById('amt-'+k); if(a) a.textContent='0';
+        var b=document.getElementById('bet-'+k); if(b) b.classList.remove('selected');
+      });
       var ex=document.getElementById('p-expo'); if(ex) ex.textContent='0';
-    } }catch(e){}
-    startLocalTick();
+    }catch(e){}
+    setR({id:rid, phase:'betting', timer:15, result:null, hands:null, decided:false, bets:{}});
+    try{ var so=window.__l24socket; if(so) so.emit('game_round_sync',{gameId:'teenpatti',roundId:rid,phase:'betting',timer:15}); }catch(e){}
+    startTick();
   };
 
-  function startLocalTick(){
-    stopLocal();
+  function startTick(){
+    stop();
     localTimer=setInterval(function(){
       try{
         if(animBusy) return;
         var r=roundCache||{};
-        if(r.phase!=='betting'&&r.phase!=='locked'){ stopLocal(); return; }
-        var timer=Math.max(0,(Number(r.timer)||0)-1);
-        var phase=r.phase;
-        if(timer===4 && phase==='betting') phase='locked';
-        if(timer<=0){
-          stopLocal();
-          setRound({timer:0, phase:'waiting'});
+        if(r.phase!=='betting'&&r.phase!=='locked'){ stop(); return; }
+        var t=Math.max(0,(Number(r.timer)||0)-1), ph=r.phase;
+        if(t===4 && ph==='betting') ph='locked';
+        if(t<=0){
+          stop();
+          setR({timer:0, phase:'waiting'});
           var w=null;
           if(window.masterForcedWinner){ w=window.masterForcedWinner; window.masterForcedWinner=null; }
-          else if(typeof smartAuto==='function'){ try{ w=smartAuto(r); }catch(e){} }
           if(w==='A') w='a'; if(w==='B') w='b';
-          if(w!=='a'&&w!=='b') w = Math.random()<0.5?'a':'b';
-          finishLocal(w);
+          if(w!=='a'&&w!=='b'){
+            if(typeof smartAuto==='function'){ try{ w=smartAuto(r); }catch(e){} }
+          }
+          if(w==='A') w='a'; if(w==='B') w='b';
+          if(w!=='a'&&w!=='b') w=Math.random()<0.5?'a':'b';
+          finish(w);
           return;
         }
-        setRound({timer:timer, phase:phase});
+        setR({timer:t, phase:ph});
       }catch(e){ console.error('TP tick',e); }
     },1000);
   }
 
-  function cardHtmlSafe(c){
-    try{ return (typeof cardHTML==='function') ? cardHTML(c) : '<div class="card">?</div>'; }catch(e){ return ''; }
-  }
-
-  function animateHands(hands){
-    return new Promise(function(resolve){
-      animBusy=true;
-      var aEl=document.getElementById('p-cards-a');
-      var bEl=document.getElementById('p-cards-b');
-      if(aEl) aEl.innerHTML='';
-      if(bEl) bEl.innerHTML='';
-      var ha=Array.isArray(hands&&hands.a)?hands.a:[];
-      var hb=Array.isArray(hands&&hands.b)?hands.b:[];
-      var shownA=['','',''], shownB=['','',''];
-      // Sequence: A1, B1, A2, B2, A3, B3 — 1.5s between each
-      var steps = [
-        function(){ if(ha[0]&&aEl){ shownA[0]=cardHtmlSafe(ha[0]); aEl.innerHTML=shownA.join(''); } },
-        function(){ if(hb[0]&&bEl){ shownB[0]=cardHtmlSafe(hb[0]); bEl.innerHTML=shownB.join(''); } },
-        function(){ if(ha[1]&&aEl){ shownA[1]=cardHtmlSafe(ha[1]); aEl.innerHTML=shownA.join(''); } },
-        function(){ if(hb[1]&&bEl){ shownB[1]=cardHtmlSafe(hb[1]); bEl.innerHTML=shownB.join(''); } },
-        function(){ if(ha[2]&&aEl){ shownA[2]=cardHtmlSafe(ha[2]); aEl.innerHTML=shownA.join(''); } },
-        function(){ if(hb[2]&&bEl){ shownB[2]=cardHtmlSafe(hb[2]); bEl.innerHTML=shownB.join(''); } }
-      ];
-      var i=0;
-      function next(){
-        try{
-          if(i < steps.length){
-            steps[i]();
-            i++;
-            setTimeout(next, 1500);
-            return;
-          }
-          var haEl=document.getElementById('p-hand-a'); if(haEl) haEl.textContent=(hands&&hands.handA)||'';
-          var hbEl=document.getElementById('p-hand-b'); if(hbEl) hbEl.textContent=(hands&&hands.handB)||'';
-          animBusy=false;
-          resolve();
-        }catch(e){ console.error(e); animBusy=false; resolve(); }
-      }
-      setTimeout(next, 300);
-    });
-  }
-
-  
-  function settleLibraTP(winner){
+  function finish(w){
+    if(busy) return; busy=true;
     try{
-      var won = Number(myBets[winner])||0;
-      var winAmt = won>0 ? Math.floor(won*1.95) : 0;
-      if(winAmt>0) libraWallet(winAmt, 'win_'+winner);
-    }catch(e){}
-  }
-
-  async function finishLocal(winner){
-    if(localBusy) return;
-    localBusy=true;
-    try{
-      if(winner==='A') winner='a'; if(winner==='B') winner='b';
-      if(winner!=='a'&&winner!=='b') winner='a';
-      var hands = (typeof buildHands==='function') ? buildHands(winner) : {a:[],b:[],handA:'',handB:''};
-      // dealing phase WITHOUT exposing hands to onRoundUpdate race — keep hands null until anim done
-      setRound({ result:null, hands:null, decided:true, phase:'dealing', timer:0 });
-      await animateHands(hands);
-      setRound({ result:winner, hands:hands, decided:true, phase:'result', timer:0 });
-      try{ settleLibraTP(winner); }catch(e){}
-      try{
-        var so=window.__l24socket;
-        if(so) so.emit('game_result_report',{gameId:'teenpatti', roundId:localRoundId, winner: winner==='a'?'A':'B'});
-      }catch(e){}
-      localBusy=false;
-      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 3000);
+      var hands=buildHandsSafe(w);
+      setR({phase:'dealing', timer:0, decided:true, result:null, hands:null});
+      animateSeq(hands, w, function(){
+        setR({phase:'result', result:w, hands:hands, decided:true, timer:0});
+        try{ settle(w); }catch(e){}
+        try{ var so=window.__l24socket; if(so) so.emit('game_result_report',{gameId:'teenpatti',roundId:rid,winner:w==='a'?'A':'B'}); }catch(e){}
+        busy=false;
+        setTimeout(function(){ window.__tpStart(); }, 3000);
+      });
     }catch(e){
-      console.error('TP finish',e);
-      localBusy=false; animBusy=false;
-      setTimeout(function(){ try{ window.autoStartRound(); }catch(e){} }, 2500);
+      console.error(e); busy=false; animBusy=false;
+      setTimeout(function(){ window.__tpStart(); }, 3000);
     }
   }
 
-  window.ensureAutoEngine = function(){
-    if(animBusy||localBusy) return;
+  window.__tpEnsure = function(){
+    if(busy||animBusy) return;
     var r=roundCache||{}, ph=r.phase||'idle';
-    if(ph==='idle'||ph==='result'||!ph){ if(!localTimer) window.autoStartRound(); }
-    else if((ph==='betting'||ph==='locked')&&!localTimer) startLocalTick();
-    else if(ph==='waiting'&&!r.decided){
-      var w=window.masterForcedWinner||'a'; window.masterForcedWinner=null; finishLocal(w);
-    }
+    if(!localTimer && (ph==='idle'||ph==='result'||!ph)) window.__tpStart();
+    else if((ph==='betting'||ph==='locked')&&!localTimer) startTick();
   };
 
-  // Disconnect firebase round listener to prevent mid-round overwrites
-  try{
-    if(typeof fdb!=='undefined' && typeof ROOT!=='undefined'){
-      fdb.ref(ROOT+'/round').off();
-    }
-  }catch(e){}
+  window.__setForce = function(w){
+    if(!w) return;
+    if(w==='A'||w==='a') window.masterForcedWinner='a';
+    else if(w==='B'||w==='b') window.masterForcedWinner='b';
+  };
 
-  // Safer onRoundUpdate: during dealing don't force-show hands from partial state
-  var _origOnRound = window.onRoundUpdate;
-  // can't easily wrap if not on window — patch by leaving phase dealing with hands null
-
-  setTimeout(function(){ window.ensureAutoEngine(); }, 1000);
-  setInterval(function(){ try{ window.ensureAutoEngine(); }catch(e){} }, 7000);
+  setTimeout(function(){
+    try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').off(); }catch(e){}
+    try{
+      var so=window.__l24socket;
+      if(so){
+        so.on('master_force_result', function(d){ if(d&&d.gameId==='teenpatti') window.__setForce(d.winner); });
+      }
+    }catch(e){}
+    window.__tpStart();
+  }, 1500);
 })();
 </script>
 
