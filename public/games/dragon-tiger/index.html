@@ -460,18 +460,19 @@ function startLocalRounds(){
 }
 function runLocalRound(){
   const rid='DT-'+Date.now().toString(36).toUpperCase(); currentRoundKey=rid; lastRoundId=rid; resetBetsForNewRound(rid);
-  masterForcedWinner = null;
+  // keep masterForcedWinner for this round (one-shot after use)
   resetCardFlips();
   try{ if(typeof reportRoundSync==='function') reportRoundSync('betting', 10); }catch(e){}
   try{ if(libraSocket) libraSocket.emit('game_round_sync', { gameId:'dragon', roundId: rid, phase:'betting', timer:10 }); }catch(e){}
   let left=10; isBettingOpen=true; betsLocked=false;
   const tick=()=>{ document.getElementById('timer').innerText=left; if(left<=4){betsLocked=true;isBettingOpen=false;document.getElementById('status').innerText='Bets Locked'; try{ if(typeof reportRoundSync==='function') reportRoundSync('locked', left); }catch(e){}} else {document.getElementById('status').innerText='Betting Time'; try{ if(typeof reportRoundSync==='function') reportRoundSync('betting', left); }catch(e){}}
-    if(left<=0){clearInterval(localRoundTimer);isBettingOpen=false;
+    if(left<=0){clearInterval(localRoundTimer);isBettingOpen=false;betsLocked=true;
       const forced = masterForcedWinner;
-      const c = forced ? pickCardsForWinner(forced) : getFinalCardsLocal();
-      setTimeout(()=>applyReveal(c.dragon,c.tiger, forced||null),300);
-      // dragon open + 2s + result hold
-      setTimeout(runLocalRound, 8000); return;} left--; };
+      masterForcedWinner = null; // consume one-shot force
+      const c = (forced && typeof pickCardsForWinner==='function') ? pickCardsForWinner(forced) : getFinalCardsLocal();
+      // reveal starts immediately; dragon 1.5s, tiger +2.5s, new round +2.5s after tiger = 6.5s total
+      try{ applyReveal(c.dragon, c.tiger, forced||null); }catch(e){ console.error(e); }
+      setTimeout(runLocalRound, 6500); return;} left--; };
   localRoundTimer=setInterval(tick,1000); tick();
 }
 function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; }
@@ -784,7 +785,7 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     });
     so.on('games_updated',gs=>{if(gs&&gs.dragon&&!gs.dragon.active)location.href='/dashboard';});
     so.on('master_force_result', d=>{ if(d&&d.gameId==='dragon'){ masterForcedWinner=d.winner||null; }});
-    so.on('live_game_update', g=>{ /* force is one-shot via master_force_result only */ });
+    so.on('live_game_update', g=>{});
     await init();
   }catch(e){document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;padding:10px 16px;background:#fff;color:#000;border-radius:8px">Back</a></div></div>`; }
 })();
