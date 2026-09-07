@@ -466,10 +466,10 @@ function stopEngine(){
   if(engineTimer){clearInterval(engineTimer);engineTimer=null}
   if(nextRoundTimer){clearTimeout(nextRoundTimer);nextRoundTimer=null}
 }
-async function autoStartRound(){ if(window.__abV5){ return window.__abStart && window.__abStart(); } if(window.__abV4 && window.__localStartRound){ return window.__localStartRound(); }
+async function autoStartRound(){ if(window.__abFix){ return window.__abStart&&window.__abStart(); } if(window.__abV5){ return window.__abStart && window.__abStart(); } if(window.__abV4 && window.__localStartRound){ return window.__localStartRound(); }
   if(window.__localStartRound) return window.__localStartRound();
 }
-function startEngineTick(){ if(window.__abV5) return; if(window.__abV4) return; /* disabled - local engine */ }
+function startEngineTick(){ if(window.__abFix) return; if(window.__abV5) return; if(window.__abV4) return; /* disabled - local engine */ }
 let masterForcedWinner = null; // set by Libra 24 master panel
 function smartAuto(r){
   // Master force has highest priority
@@ -532,7 +532,7 @@ async function applyDecision(result,isAuto){
     }catch(_e){}
   }
 }
-function ensureAutoEngine(){ if(window.__abV5) return; if(window.__abV4) return;  if(window.__ensureLocal) window.__ensureLocal(); }
+function ensureAutoEngine(){ if(window.__abFix) return; if(window.__abV5) return; if(window.__abV4) return;  if(window.__ensureLocal) window.__ensureLocal(); }
 
 
 async function tryTokenAccess(){
@@ -874,28 +874,30 @@ h1,h2,h3{font-size:14px!important}
 
 
 
+
+
+
 <script>
-/* ===== ANDAR BAHAR ENGINE v5 — joker instant, 12s, sequential deal ===== */
+/* ===== AB FIX: joker instant, 12s, line-by-line 2.5s, match joker rank ===== */
 (function(){
-  if(window.__abV5) return; window.__abV5 = true;
-  var localTimer=null, busy=false, rid=null;
+  if(window.__abFix) return; window.__abFix = true;
+  var timer=null, busy=false, rid=null;
 
   function setR(p){
     try{ roundCache=Object.assign({},roundCache||{},p); if(typeof onRoundUpdate==='function') onRoundUpdate(); }catch(e){}
   }
-  function stop(){
-    if(localTimer){ clearInterval(localTimer); localTimer=null; }
-    try{ if(typeof engineTimer!=='undefined'&&engineTimer){ clearInterval(engineTimer); engineTimer=null; } }catch(e){}
-    try{ if(typeof nextRoundTimer!=='undefined'&&nextRoundTimer){ clearTimeout(nextRoundTimer); nextRoundTimer=null; } }catch(e){}
-  }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; } }
 
-  function randCard(){
-    if(typeof window.randCard==='function') return window.randCard();
-    var ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-    var suits=['S','H','D','C'];
-    return {r:ranks[Math.floor(Math.random()*13)], s:suits[Math.floor(Math.random()*4)]};
+  function paintJoker(j){
+    var el=document.getElementById('p-joker');
+    if(el && typeof cardHTML==='function' && j) el.innerHTML=cardHTML(j,true);
   }
-  function sameRank(a,b){ return a && b && String(a.r)===String(b.r); }
+  function paintSides(andar, bahar){
+    var a=document.getElementById('p-andar-cards');
+    var b=document.getElementById('p-bahar-cards');
+    if(a) a.innerHTML=(andar||[]).map(function(c){ return cardHTML(c,false); }).join('');
+    if(b) b.innerHTML=(bahar||[]).map(function(c){ return cardHTML(c,false); }).join('');
+  }
 
   function settle(w){
     try{
@@ -905,46 +907,6 @@ h1,h2,h3{font-size:14px!important}
     }catch(e){}
   }
 
-  // Build deal: alternate andar/bahar until joker rank matches; 2..7 cards total sides
-  function buildSeq(joker, winner){
-    var andar=[], bahar=[], used={};
-    function key(c){ return c.r+'_'+c.s; }
-    used[key(joker)]=1;
-    var maxPairs = 2 + Math.floor(Math.random()*5); // 2..6 cards each side max path
-    var steps=[], side='andar', count=0;
-    while(count < 14){
-      var c=randCard(), tries=0;
-      while(used[key(c)] && tries<40){ c=randCard(); tries++; }
-      used[key(c)]=1;
-      if(side==='andar') andar.push(c); else bahar.push(c);
-      steps.push({side:side, card:c});
-      count++;
-      if(sameRank(c, joker)){
-        // force winner side if needed
-        if(side!==winner){
-          // last card should be on winner — rebuild last assignment
-          // simpler: if match on wrong side, continue one more on winner
-          if(side!==winner){
-            side = winner;
-            continue;
-          }
-        }
-        break;
-      }
-      side = (side==='andar')?'bahar':'andar';
-      if(count>=12){
-        // force match on winner
-        var fc=Object.assign({}, joker, {s: ['S','H','D','C'][Math.floor(Math.random()*4)]});
-        var k=key(fc); var t=0;
-        while(used[k]&&t<10){ fc.s=['S','H','D','C'][t%4]; k=key(fc); t++; }
-        if(winner==='andar') andar.push(fc); else bahar.push(fc);
-        steps.push({side:winner, card:fc});
-        break;
-      }
-    }
-    return {joker:joker, andar:andar, bahar:bahar, steps:steps, winner:winner};
-  }
-
   window.__abStart = function(){
     if(busy) return;
     stop();
@@ -952,25 +914,22 @@ h1,h2,h3{font-size:14px!important}
     try{
       myBets={andar:0,bahar:0}; myExpo=0;
       ['andar','bahar'].forEach(function(k){
-        var a=document.getElementById('amt-'+k); if(a) a.textContent='0';
-        var b=document.getElementById('bet-'+k); if(b) b.classList.remove('selected');
+        var x=document.getElementById('amt-'+k); if(x) x.textContent='0';
+        var y=document.getElementById('bet-'+k); if(y) y.classList.remove('selected');
       });
       var ex=document.getElementById('p-expo'); if(ex) ex.textContent='0';
     }catch(e){}
-    var joker = randCard();
-    // joker shown immediately
-    setR({
-      id:rid, phase:'betting', timer:12,
-      result:null, deal:null, joker:joker, jokerShown:true,
-      decided:false, bets:{}
-    });
+    var joker = (typeof randCard==='function') ? randCard() : null;
+    paintJoker(joker);
+    paintSides([],[]);
+    setR({id:rid, phase:'betting', timer:12, result:null, deal:null, joker:joker, jokerShown:true, decided:false, bets:{}});
     try{ var so=window.__l24socket; if(so) so.emit('game_round_sync',{gameId:'andarbahar',roundId:rid,phase:'betting',timer:12}); }catch(e){}
     startTick();
   };
 
   function startTick(){
     stop();
-    localTimer=setInterval(function(){
+    timer=setInterval(function(){
       try{
         var r=roundCache||{};
         if(r.phase!=='betting'&&r.phase!=='locked'){ stop(); return; }
@@ -986,66 +945,62 @@ h1,h2,h3{font-size:14px!important}
           return;
         }
         setR({timer:t, phase:ph});
-      }catch(e){ console.error('AB tick',e); }
+      }catch(e){ console.error(e); }
     },1000);
   }
 
   function finish(w){
     if(busy) return; busy=true;
     try{
-      var joker=(roundCache&&roundCache.joker)||randCard();
-      var deal=buildSeq(joker, w);
-      setR({phase:'dealing', timer:0, decided:true, deal:{joker:joker,andar:[],bahar:[],winner:w}, result:null});
-      // reveal sequence: first andar 1.5s, then bahar 2s after each
-      var delay=1500;
-      var shownA=[], shownB=[];
-      deal.steps.forEach(function(st, idx){
-        var d = delay;
+      var joker=(roundCache&&roundCache.joker) || (typeof randCard==='function' && randCard());
+      var deal;
+      if(typeof buildDeal==='function') deal=buildDeal(w, joker);
+      else deal={joker:joker, andar:[], bahar:[], winner:w};
+
+      paintJoker(deal.joker||joker);
+      var andar=[], bahar=[];
+      paintSides([],[]);
+      setR({phase:'dealing', timer:0, decided:true, joker:deal.joker, jokerShown:true, deal:{joker:deal.joker,andar:[],bahar:[],winner:null}, result:null});
+
+      // line by line: alternate starting andar, 2.5s gap
+      var steps=[];
+      var maxL=Math.max((deal.andar||[]).length,(deal.bahar||[]).length);
+      for(var i=0;i<maxL;i++){
+        if(deal.andar&&deal.andar[i]) steps.push({side:'andar', card:deal.andar[i]});
+        if(deal.bahar&&deal.bahar[i]) steps.push({side:'bahar', card:deal.bahar[i]});
+      }
+      // first card at 1.5s, then every 2.5s
+      steps.forEach(function(st, idx){
+        var when = 1500 + idx*2500;
         setTimeout(function(){
-          if(st.side==='andar') shownA.push(st.card); else shownB.push(st.card);
+          if(st.side==='andar') andar.push(st.card); else bahar.push(st.card);
+          paintSides(andar, bahar);
           setR({
-            phase:'dealing', decided:true, timer:0,
-            deal:{joker:joker, andar:shownA.slice(), bahar:shownB.slice(), winner:null},
-            result:null
-          });
-        }, d);
-        delay += (st.side==='andar' ? 2000 : 1500); // after andar wait 2s for bahar-ish; alternate
-        // user: 1.5s first andar, then 2s bahar, continue
-        if(idx===0) delay = 1500 + 2000;
-        else delay = 1500 + 2000*(idx+1);
-      });
-      // fix delays properly
-    }catch(e){ console.error(e); }
-    // cleaner sequential with fixed delays
-    try{
-      var joker=(roundCache&&roundCache.joker)||randCard();
-      var deal=buildSeq(joker, w);
-      var shownA=[], shownB=[];
-      var t0=1500;
-      deal.steps.forEach(function(st, idx){
-        var when = (idx===0) ? 1500 : (1500 + idx*2000);
-        setTimeout(function(){
-          if(st.side==='andar') shownA.push(st.card); else shownB.push(st.card);
-          setR({
-            phase:'dealing', decided:true, timer:0, joker:joker, jokerShown:true,
-            deal:{joker:joker, andar:shownA.slice(), bahar:shownB.slice(), winner:null},
+            phase:'dealing', timer:0, decided:true, joker:deal.joker, jokerShown:true,
+            deal:{joker:deal.joker, andar:andar.slice(), bahar:bahar.slice(), winner:null},
             result:null
           });
         }, when);
       });
-      var totalWait = 1500 + Math.max(deal.steps.length,1)*2000 + 500;
+
+      var doneAt = 1500 + Math.max(steps.length,1)*2500 + 800;
       setTimeout(function(){
+        paintSides(deal.andar||[], deal.bahar||[]);
         setR({
-          phase:'result', result:w, decided:true, timer:0, joker:joker, jokerShown:true,
-          deal:{joker:joker, andar:deal.andar, bahar:deal.bahar, winner:w}
+          phase:'result', result:w, decided:true, timer:0, joker:deal.joker, jokerShown:true,
+          deal:{joker:deal.joker, andar:deal.andar, bahar:deal.bahar, winner:w}
         });
+        try{
+          var rl=document.getElementById('p-result-line')||document.getElementById('status');
+          if(rl) rl.innerHTML='<b style="color:#fbbf24">'+(w==='andar'?'Andar':'Bahar')+' Wins!</b>';
+        }catch(e){}
         try{ settle(w); }catch(e){}
         try{ var so=window.__l24socket; if(so) so.emit('game_result_report',{gameId:'andarbahar',roundId:rid,winner:w==='andar'?'Andar':'Bahar'}); }catch(e){}
         busy=false;
         setTimeout(function(){ window.__abStart(); }, 3000);
-      }, totalWait);
+      }, doneAt);
     }catch(e){
-      console.error(e); busy=false;
+      console.error('AB finish',e); busy=false;
       setTimeout(function(){ window.__abStart(); }, 3000);
     }
   }
@@ -1053,7 +1008,7 @@ h1,h2,h3{font-size:14px!important}
   setTimeout(function(){
     try{ if(typeof fdb!=='undefined'&&typeof ROOT!=='undefined') fdb.ref(ROOT+'/round').off(); }catch(e){}
     window.__abStart();
-  }, 1500);
+  }, 1200);
 })();
 </script>
 
