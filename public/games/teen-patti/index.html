@@ -873,10 +873,12 @@ h1,h2,h3{font-size:14px!important}
   }
 
   function cardEl(c){
-    if(typeof cardHtml==='function') return cardHtml(c);
-    if(typeof miniCard==='function') return miniCard(c);
-    var r=(c&&c.r)||'?', s=(c&&c.s)||'';
-    return '<div class="mini-card">'+r+s+'</div>';
+    if(typeof cardHTML==='function') return cardHTML(c);
+    if(!c) return '<div class="card-back-sm">♠</div>';
+    var d=(c.display||c.r||c.rank||'?');
+    var s=(c.suit||c.s||'♠');
+    var col=(c.color||((s==='♥'||s==='♦')?'red':'black'));
+    return '<div class="mini-card '+col+'"><div>'+d+'</div><div class="s">'+s+'</div></div>';
   }
 
   function appendCard(side, c){
@@ -891,21 +893,34 @@ h1,h2,h3{font-size:14px!important}
   // Sequence: A1 (1.5s from start) then each next after 2.5s: B1,A2,B2,A3,B3 then 3s new round
   function animateSeq(hands, winner, done){
     animBusy=true;
-    clearBoard();
-    var steps=[
+    var aEl=document.getElementById('p-cards-a');
+    var bEl=document.getElementById('p-cards-b');
+    var back='<div class="card-back-sm">♠</div>';
+    // show 3 backs each side first
+    if(aEl) aEl.innerHTML=back+back+back;
+    if(bEl) bEl.innerHTML=back+back+back;
+    var shownA=['','',''], shownB=['','',''];
+    function paint(){
+      if(aEl) aEl.innerHTML=shownA.map(function(x){return x||back;}).join('');
+      if(bEl) bEl.innerHTML=shownB.map(function(x){return x||back;}).join('');
+    }
+    // A1 @1.5s, B1 @4s, A2 @6.5s, B2 @9s, A3 @11.5s, B3 @14s
+    var seq=[
       {t:1500, side:'a', i:0},
-      {t:1500+2500, side:'b', i:0},
-      {t:1500+5000, side:'a', i:1},
-      {t:1500+7500, side:'b', i:1},
-      {t:1500+10000, side:'a', i:2},
-      {t:1500+12500, side:'b', i:2}
+      {t:4000, side:'b', i:0},
+      {t:6500, side:'a', i:1},
+      {t:9000, side:'b', i:1},
+      {t:11500, side:'a', i:2},
+      {t:14000, side:'b', i:2}
     ];
-    steps.forEach(function(st){
+    seq.forEach(function(st){
       setTimeout(function(){
         try{
-          var arr = hands[st.side]||[];
-          if(arr[st.i]) appendCard(st.side, arr[st.i]);
-        }catch(e){}
+          var arr=hands[st.side]||[];
+          var html=cardEl(arr[st.i]);
+          if(st.side==='a') shownA[st.i]=html; else shownB[st.i]=html;
+          paint();
+        }catch(e){console.error(e)}
       }, st.t);
     });
     setTimeout(function(){
@@ -913,11 +928,11 @@ h1,h2,h3{font-size:14px!important}
         var ha=document.getElementById('p-hand-a'); if(ha) ha.textContent=(hands.handA||'');
         var hb=document.getElementById('p-hand-b'); if(hb) hb.textContent=(hands.handB||'');
         var rl=document.getElementById('p-result-line');
-        if(rl) rl.textContent = (winner==='a'?'Team A':'Team B') + ' Wins';
+        if(rl) rl.innerHTML='<b style="color:#fbbf24">'+(winner==='a'?'Team A':'Team B')+' Wins!</b>';
       }catch(e){}
       animBusy=false;
       if(done) done();
-    }, 1500+12500+400);
+    }, 14500);
   }
 
   function settle(w){
