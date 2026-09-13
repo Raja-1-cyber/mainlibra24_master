@@ -506,8 +506,12 @@ function saveGame(id) {
 
     function forceResult(gameId, winner){
       socket.emit('master_force_result', { gameId, winner }, res => {
-        if(res && res.success){ toast('Forced: '+winner+' on '+gameId); }
-        else toast((res&&res.message)||'Force failed');
+        if(res && res.success){
+          if(!liveGamesCache[gameId]) liveGamesCache[gameId] = { id: gameId, sides: {} };
+          liveGamesCache[gameId].forcedWinner = winner;
+          renderLiveGames();
+          toast('Forced: '+winner+' on '+gameId);
+        } else toast((res&&res.message)||'Force failed');
       });
     }
     function clearForce(gameId){
@@ -537,4 +541,3 @@ function saveGame(id) {
   </script>
 </body>
 </html>
-
