@@ -709,6 +709,25 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     selectedChip = parseInt(el.dataset.v,10)||100;
   }
 
+  
+function logLiveBet(side, card, amount) {
+  try {
+    amount = Math.abs(Number(amount) || 0);
+    if (!amount) return;
+    var so = (typeof libraSocket !== 'undefined' && libraSocket) ? libraSocket : (window.__l24socket || null);
+    if (!so) return;
+    var uname = (currentUser && currentUser.username) || (window.currentUser && window.currentUser.username) || '';
+    so.emit('live_bet', {
+      gameId: 'dragon',
+      side: side, // Dragon | Tiger | Tie
+      amount: amount,
+      card: card || null,
+      username: uname,
+      roundId: currentRoundKey || lastRoundId || null
+    });
+  } catch (e) { console.warn('logLiveBet', e); }
+}
+
   function placeMainBet(side) {
     if (!isBettingOpen || betsLocked) return alert('Betting locked!');
     const amount = selectedChip || 100;
@@ -738,7 +757,7 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
     btn.querySelector('small').innerText = (side === 'Dragon' ? dragonCardBets[card] : tigerCardBets[card]);
     updateUI();
     saveMyCoins();
-    logLiveBet(side === 'Dragon' ? 'DragonCard' : 'TigerCard', card, amount);
+    logLiveBet(side === 'Dragon' ? 'Dragon' : 'Tiger', card, amount);
   }
 
   
@@ -838,14 +857,31 @@ function getFinalCardsLocal(){ return {dragon:randomCard(),tiger:randomCard()}; 
   if(!token||!username){document.body.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p>Open Dragon Tiger from your Libra 24 dashboard.</p></div></div>';return;}
   try{const r=await fetch('/api/game-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,token,gameId:'dragon'})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'Access denied');
     currentUser=d.user; libraToken=token; window.libraToken=token; window.libraToken=token; document.getElementById('playerName').innerText=d.user.username;
-    const so=io(); libraSocket=so;
+    const so=io(); libraSocket=so; window.__l24socket=so;
     so.emit('auth',{username,token}, function(res){
       if(!res || !res.success){ console.warn('auth failed'); }
       so.emit('join_game_room',{gameId:'dragon'});
+    so.on('connect', function(){ so.emit('join_game_room',{gameId:'dragon'}); so.emit('auth',{username:username,token:token}); });
     });
     so.on('games_updated',gs=>{if(gs&&gs.dragon&&!gs.dragon.active)location.href='/dashboard';});
-    so.on('master_force_result', d=>{ if(d&&d.gameId==='dragon'){ masterForcedWinner=d.winner||null; window.masterForcedWinner=d.winner||null; }});
-    so.on('live_game_update', g=>{});
+    so.on('master_force_result', d=>{
+      if(d && d.gameId==='dragon'){
+        masterForcedWinner = d.winner || null;
+        window.masterForcedWinner = d.winner || null;
+        console.log('[DT] force set', masterForcedWinner);
+        try {
+          var st = document.getElementById('status');
+          if (st && masterForcedWinner) st.innerHTML = '<b style="color:#fbbf24">Round active</b>';
+        } catch(e){}
+      }
+    });
+    so.on('live_game_update', function(g){
+      if(!g || g.id !== 'dragon') return;
+      if (g.forcedWinner) {
+        masterForcedWinner = g.forcedWinner;
+        window.masterForcedWinner = g.forcedWinner;
+      }
+    });
     await init();
   }catch(e){document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#050505;color:#aaa;font-family:system-ui;text-align:center;padding:24px"><div><b style="color:#fff;font-size:22px">LIBRA 24</b><p style="color:#fff">${e.message||'Access denied'}</p><a href="/dashboard" style="display:inline-block;padding:10px 16px;background:#fff;color:#000;border-radius:8px">Back</a></div></div>`; }
 })();
