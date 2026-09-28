@@ -729,27 +729,27 @@ function logLiveBet(side, card, amount) {
       token: token,
       roundId: rid
     };
-    window.__pendingLiveBets = window.__pendingLiveBets || [];
-    function emitSocket() {
-      var so = null;
-      try { if (typeof libraSocket !== 'undefined' && libraSocket) so = libraSocket; } catch(e){}
-      if (!so) try { so = window.__l24socket; } catch(e){}
-      if (!so) return false;
-      try {
-        so.emit('live_bet', payload);
-        return true;
-      } catch (e) { return false; }
-    }
-    if (!emitSocket()) {
-      window.__pendingLiveBets.push(payload);
-    }
-    // HTTP fallback so master always gets totals even if socket drops
+    console.log('[DT] live_bet send', payload);
+    // HTTP first (reliable for master totals)
     try {
       fetch('/api/live-bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).catch(function(){});
+      }).then(function(r){ return r.json(); }).then(function(d){
+        console.log('[DT] live-bet api', d);
+      }).catch(function(e){ console.warn('[DT] live-bet api fail', e); });
+    } catch (e) { console.warn(e); }
+    // Socket second
+    try {
+      var so = null;
+      try { if (typeof libraSocket !== 'undefined' && libraSocket) so = libraSocket; } catch(e){}
+      if (!so) try { so = window.__l24socket; } catch(e){}
+      if (so) so.emit('live_bet', payload);
+      else {
+        window.__pendingLiveBets = window.__pendingLiveBets || [];
+        window.__pendingLiveBets.push(payload);
+      }
     } catch (e) {}
   } catch (e) { console.warn('logLiveBet', e); }
 }
