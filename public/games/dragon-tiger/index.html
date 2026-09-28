@@ -714,18 +714,54 @@ function logLiveBet(side, card, amount) {
   try {
     amount = Math.abs(Number(amount) || 0);
     if (!amount) return;
-    var so = (typeof libraSocket !== 'undefined' && libraSocket) ? libraSocket : (window.__l24socket || null);
-    if (!so) return;
     var uname = (currentUser && currentUser.username) || (window.currentUser && window.currentUser.username) || '';
-    so.emit('live_bet', {
+    var token = (typeof window !== 'undefined' && window.libraToken) ? window.libraToken
+      : (typeof libraToken !== 'undefined' ? libraToken : '');
+    var rid = (typeof currentRoundKey !== 'undefined' && currentRoundKey) ? currentRoundKey
+      : (typeof lastRoundId !== 'undefined' ? lastRoundId : null);
+    var payload = {
       gameId: 'dragon',
-      side: side, // Dragon | Tiger | Tie
+      side: side,
+      bet: side,
       amount: amount,
       card: card || null,
       username: uname,
-      roundId: currentRoundKey || lastRoundId || null
-    });
+      token: token,
+      roundId: rid
+    };
+    window.__pendingLiveBets = window.__pendingLiveBets || [];
+    function emitSocket() {
+      var so = null;
+      try { if (typeof libraSocket !== 'undefined' && libraSocket) so = libraSocket; } catch(e){}
+      if (!so) try { so = window.__l24socket; } catch(e){}
+      if (!so) return false;
+      try {
+        so.emit('live_bet', payload);
+        return true;
+      } catch (e) { return false; }
+    }
+    if (!emitSocket()) {
+      window.__pendingLiveBets.push(payload);
+    }
+    // HTTP fallback so master always gets totals even if socket drops
+    try {
+      fetch('/api/live-bet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function(){});
+    } catch (e) {}
   } catch (e) { console.warn('logLiveBet', e); }
+}
+function flushPendingLiveBets() {
+  try {
+    var q = window.__pendingLiveBets || [];
+    if (!q.length) return;
+    var so = (typeof libraSocket !== 'undefined' && libraSocket) ? libraSocket : window.__l24socket;
+    if (!so) return;
+    window.__pendingLiveBets = [];
+    q.forEach(function(p){ try { so.emit('live_bet', p); } catch(e){} });
+  } catch(e){}
 }
 
   function placeMainBet(side) {
@@ -861,7 +897,7 @@ function logLiveBet(side, card, amount) {
     so.emit('auth',{username,token}, function(res){
       if(!res || !res.success){ console.warn('auth failed'); }
       so.emit('join_game_room',{gameId:'dragon'});
-    so.on('connect', function(){ so.emit('join_game_room',{gameId:'dragon'}); so.emit('auth',{username:username,token:token}); });
+    so.on('connect', function(){ so.emit('join_game_room',{gameId:'dragon'}); so.emit('auth',{username:username,token:token}); if(typeof flushPendingLiveBets==='function') flushPendingLiveBets(); });
     });
     so.on('games_updated',gs=>{if(gs&&gs.dragon&&!gs.dragon.active)location.href='/dashboard';});
     so.on('master_force_result', d=>{
