@@ -66,13 +66,21 @@
     }
 
     function enterGame(gameId) {
+      const FALLBACK = {
+        dragon: '/games/dragon-tiger/index.html',
+        teenpatti: '/games/teen-patti/index.html',
+        andarbahar: '/games/andar-bahar/index.html',
+        lucky7: '/games/lucky-7/index.html'
+      };
       socket.emit('player_enter_game', { gameId }, res => {
-        if (!res.success) return toast(res.message || 'Game not available');
-        if (res.url) {
-          const u = new URL(res.url, window.location.origin);
-          window.open(u.toString(), '_blank');
-        } else {
-          toast('Game URL not set by Master yet');
+        if (!res || !res.success) return toast((res && res.message) || 'Game not available');
+        let url = (res.url && String(res.url).trim()) || FALLBACK[gameId];
+        if (!url) return toast('Game URL not set by Master yet');
+        try {
+          const u = new URL(url, window.location.origin);
+          window.location.href = u.toString();
+        } catch (e) {
+          window.location.href = url;
         }
       });
     }
