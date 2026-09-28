@@ -249,11 +249,8 @@ app.post('/api/live-bet', (req, res) => {
     side = sideMap[key.toLowerCase()] || sideMap[key] || key;
     const g = liveGames[gameId];
     if (data.roundId && data.roundId !== g.roundId) {
-      Object.keys(g.sides).forEach(s => { g.sides[s] = 0; });
       g.roundId = data.roundId;
-      g.phase = 'betting';
-      g.forcedWinner = null;
-      g.betLog = [];
+      g.phase = g.phase || 'betting';
     }
     if (g.sides[side] === undefined) g.sides[side] = 0;
     g.sides[side] += amount;
@@ -590,13 +587,11 @@ io.on('connection', (socket) => {
     side = sideMap[key.toLowerCase()] || sideMap[key] || key;
 
     const g = liveGames[gameId];
-    // new round → reset totals first
+    // Do NOT wipe sides here — only game_round_sync resets between rounds.
+    // Wiping on every new client roundId caused master totals to stay 0.
     if (data.roundId && data.roundId !== g.roundId) {
-      Object.keys(g.sides).forEach(s => { g.sides[s] = 0; });
       g.roundId = data.roundId;
-      g.phase = 'betting';
-      g.forcedWinner = null;
-      g.betLog = [];
+      g.phase = g.phase || 'betting';
     }
     if (g.sides[side] === undefined) {
       // unknown side — still track under given name
@@ -636,12 +631,22 @@ io.on('connection', (socket) => {
   socket.on('game_round_sync', ({ gameId, roundId, phase, timer }) => {
     const g = liveGames[gameId];
     if (!g) return;
+    const prevPhase = g.phase;
     if (roundId && roundId !== g.roundId) {
-      resetLiveSides(gameId, roundId);
+      // Only clear side totals when a NEW betting round starts after a finished round.
+      // Timer ticks with same roundId never reset. Desynced clients won't zero master's view mid-bet.
+      const endPhases = { result:1, idle:1, dealing:1, waiting:1 };
+      if (phase === 'betting' && (endPhases[prevPhase] || !prevPhase || prevPhase === 'locked')) {
+        // if previous was locked same cycle, don't wipe — only wipe from result/idle/dealing/waiting
+      }
+      if (phase === 'betting' && (prevPhase === 'result' || prevPhase === 'idle' || prevPhase === 'dealing' || prevPhase === 'waiting' || !prevPhase)) {
+        resetLiveSides(gameId, roundId);
+      } else {
+        g.roundId = roundId;
+      }
     }
     if (phase) g.phase = phase;
     if (typeof timer === 'number') g.timer = timer;
-    // one-shot force: clear after result phase starts
     if (phase === 'result' || phase === 'dealing') {
       if (g.forcedWinner) {
         g.forcedWinner = null;
