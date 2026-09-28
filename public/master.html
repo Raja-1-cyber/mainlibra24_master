@@ -534,10 +534,21 @@ function saveGame(id) {
       });
     }
 
+    
+    // LIVE_POLL_FAST — keep controller totals fresh
+    setInterval(function(){
+      try { socket.emit('get_live_games', function(r){
+        if (r && r.success && r.liveGames) {
+          liveGamesCache = r.liveGames;
+          if (typeof renderLiveGames === 'function') renderLiveGames();
+        }
+      }); } catch(e){}
+    }, 1500);
+
     socket.on('live_game_update', g => {
       if(!g || !g.id) return;
-      liveGamesCache[g.id] = g;
-      renderLiveGames();
+      liveGamesCache[g.id] = Object.assign({}, liveGamesCache[g.id] || {}, g);
+      if (typeof renderLiveGames === 'function') renderLiveGames();
     });
 
     // initial fetch
