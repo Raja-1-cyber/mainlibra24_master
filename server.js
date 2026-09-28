@@ -143,7 +143,7 @@ Object.keys(DEFAULT_GAMES).forEach(id => {
   if (!games[id]) games[id] = { ...DEFAULT_GAMES[id] };
   else {
     games[id].active = true;
-    games[id].url = games[id].url || DEFAULT_GAMES[id].url;
+    games[id].url = (games[id].url && String(games[id].url).trim()) || DEFAULT_GAMES[id].url;
     games[id].name = games[id].name || DEFAULT_GAMES[id].name;
   }
 });
@@ -449,11 +449,28 @@ io.on('connection', (socket) => {
     if (socket.role !== 'player') return cb({ success: false, message: 'Players only' });
     const u = users[socket.username];
     if (!u) return cb({ success: false });
+    const DEFAULT_URLS = {
+      dragon: '/games/dragon-tiger/index.html',
+      teenpatti: '/games/teen-patti/index.html',
+      andarbahar: '/games/andar-bahar/index.html',
+      lucky7: '/games/lucky-7/index.html'
+    };
+    const g = games[gameId];
+    if (!g || g.active === false) {
+      return cb({ success: false, message: 'Game not available' });
+    }
+    let url = (g.url && String(g.url).trim()) || DEFAULT_URLS[gameId] || null;
+    if (!url) {
+      return cb({ success: false, message: 'Game URL not set' });
+    }
+    if (!url.startsWith('http') && !url.startsWith('/')) {
+      url = '/' + url;
+    }
     pushRecord(gameHistory, FILES.gameHistory, {
       id: uuidv4(), username: u.username, parent: u.parent || null,
       game: gameId || 'unknown', coins: Number(u.coins || 0), time: new Date().toISOString()
     });
-    cb({ success: true });
+    cb({ success: true, url, gameId, name: g.name || gameId });
   });
 
   socket.on('wallet_adjust', ({ delta, reason, game }, cb) => {
