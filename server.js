@@ -7,6 +7,9 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 
+process.on('uncaughtException', (e) => { console.error('[uncaught]', e); });
+process.on('unhandledRejection', (e) => { console.error('[unhandled]', e); });
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -16,8 +19,29 @@ const PORT = process.env.PORT || 3000;
 //   Oracle:  export DATA_DIR=/home/ubuntu/libra-data
 //   Render:  DATA_DIR=/var/data (needs paid disk)
 // Default: ./data next to server.js — never deletes users on boot
-const DATA = process.env.DATA_DIR || process.env.RENDER_DISK_PATH || path.join(__dirname, 'data');
-try { if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true }); } catch (e) { console.error('DATA mkdir', e); }
+function resolveDataDir() {
+  const candidates = [
+    process.env.DATA_DIR,
+    process.env.RENDER_DISK_PATH,
+    path.join(__dirname, 'data'),
+    path.join('/tmp', 'libra-data')
+  ].filter(Boolean);
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const test = path.join(dir, '.write_test');
+      fs.writeFileSync(test, 'ok');
+      fs.unlinkSync(test);
+      return dir;
+    } catch (e) {
+      console.warn('[data] not writable:', dir, e && e.message);
+    }
+  }
+  const fallback = path.join('/tmp', 'libra-data');
+  try { fs.mkdirSync(fallback, { recursive: true }); } catch (e) {}
+  return fallback;
+}
+const DATA = resolveDataDir();
 console.log('[data] using', DATA);
 
 const FILES = {
@@ -629,31 +653,26 @@ io.on('connection', (socket) => {
   });
 
   socket.on('game_round_sync', ({ gameId, roundId, phase, timer }) => {
-    const g = liveGames[gameId];
-    if (!g) return;
-    const prevPhase = g.phase;
-    if (roundId && roundId !== g.roundId) {
-      // Only clear side totals when a NEW betting round starts after a finished round.
-      // Timer ticks with same roundId never reset. Desynced clients won't zero master's view mid-bet.
-      const endPhases = { result:1, idle:1, dealing:1, waiting:1 };
-      if (phase === 'betting' && (endPhases[prevPhase] || !prevPhase || prevPhase === 'locked')) {
-        // if previous was locked same cycle, don't wipe — only wipe from result/idle/dealing/waiting
+    try {
+      const g = liveGames[gameId];
+      if (!g) return;
+      const prevPhase = g.phase;
+      if (roundId && roundId !== g.roundId) {
+        if (phase === 'betting' && (prevPhase === 'result' || prevPhase === 'idle' || prevPhase === 'dealing' || prevPhase === 'waiting' || !prevPhase)) {
+          resetLiveSides(gameId, roundId);
+        } else {
+          g.roundId = roundId;
+        }
       }
-      if (phase === 'betting' && (prevPhase === 'result' || prevPhase === 'idle' || prevPhase === 'dealing' || prevPhase === 'waiting' || !prevPhase)) {
-        resetLiveSides(gameId, roundId);
-      } else {
-        g.roundId = roundId;
-      }
-    }
-    if (phase) g.phase = phase;
-    if (typeof timer === 'number') g.timer = timer;
-    if (phase === 'result' || phase === 'dealing') {
-      if (g.forcedWinner) {
+      if (phase) g.phase = phase;
+      if (typeof timer === 'number') g.timer = timer;
+      if (phase === 'result' || phase === 'dealing') {
         g.forcedWinner = null;
-        g.forceConsumed = true;
       }
+      broadcastLive(gameId);
+    } catch (e) {
+      console.error('game_round_sync', e);
     }
-    broadcastLive(gameId);
   });
 
   socket.on('game_result_report', ({ gameId, roundId, winner }) => {
