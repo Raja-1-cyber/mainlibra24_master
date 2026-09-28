@@ -229,6 +229,63 @@ app.post('/api/wallet/adjust', (req, res) => {
   }
 });
 
+
+app.post('/api/live-bet', (req, res) => {
+  try {
+    const data = req.body || {};
+    const gameId = data.gameId;
+    let side = data.side || data.bet;
+    const amount = Math.abs(Number(data.amount) || 0);
+    if (!gameId || !liveGames[gameId] || !side || amount <= 0) {
+      return res.json({ success: false, message: 'Invalid bet' });
+    }
+    const sideMap = {
+      dragon: 'Dragon', tiger: 'Tiger', tie: 'Tie',
+      andar: 'Andar', bahar: 'Bahar',
+      a: 'A', b: 'B',
+      down: 'down', exact: 'exact', up: 'up'
+    };
+    const key = String(side).trim();
+    side = sideMap[key.toLowerCase()] || sideMap[key] || key;
+    const g = liveGames[gameId];
+    if (data.roundId && data.roundId !== g.roundId) {
+      Object.keys(g.sides).forEach(s => { g.sides[s] = 0; });
+      g.roundId = data.roundId;
+      g.phase = 'betting';
+      g.forcedWinner = null;
+      g.betLog = [];
+    }
+    if (g.sides[side] === undefined) g.sides[side] = 0;
+    g.sides[side] += amount;
+    g.phase = g.phase || 'betting';
+    g.betLog.unshift({
+      username: data.username || '?',
+      side,
+      amount,
+      time: new Date().toISOString()
+    });
+    if (g.betLog.length > 40) g.betLog.length = 40;
+    broadcastLive(gameId);
+    const payload = {
+      username: data.username || '?',
+      game: GAME_LABELS[gameId] || gameId,
+      gameId,
+      bet: side,
+      side,
+      amount,
+      sides: { ...g.sides },
+      roundId: g.roundId
+    };
+    io.to('master').emit('live_bet', payload);
+    io.emit('live_bet', payload);
+    res.json({ success: true, sides: g.sides });
+  } catch (e) {
+    console.error('live-bet api', e);
+    res.status(500).json({ success: false });
+  }
+});
+
+
 io.on('connection', (socket) => {
   socket.on('login', ({ username, password }, cb) => {
     username = (username || '').trim().toLowerCase();
@@ -515,7 +572,7 @@ io.on('connection', (socket) => {
 
   socket.on('live_bet', (data) => {
     const gameId = data && data.gameId;
-    let side = data && data.side;
+    let side = (data && (data.side || data.bet));
     const amount = Math.abs(Number(data && data.amount) || 0);
     if (!gameId || !liveGames[gameId] || !side || amount <= 0) {
       io.to('master').emit('live_bet', data || {});
